@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 0 0% 100%;
+  --foreground: 240 10% 3.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 240 10% 3.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 240 10% 3.9%;
+  --primary: 250 70% 55%;
+  --primary-foreground: 0 0% 98%;
+  --secondary: 250 5% 96%;
+  --secondary-foreground: 250 10% 30%;
+  --muted: 250 5% 95%;
+  --muted-foreground: 250 5% 50%;
+  --accent: 250 70% 55%;
+  --accent-foreground: 0 0% 98%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 250 5% 92%;
+  --input: 250 5% 92%;
+  --ring: 250 70% 55%;
+  --radius: 0.75rem;
+
+  /* Parking-specific colors */
+  --gauge-green: 145 70% 65%;
+  --gauge-yellow: 45 90% 65%;
+  --gauge-red: 0 84% 60%;
+}
+
+.dark {
+  --background: 250 10% 10%;
+  --foreground: 0 0% 95%;
+  --card: 250 10% 15%;
+  --card-foreground: 0 0% 95%;
+  --popover: 250 10% 15%;
+  --popover-foreground: 0 0% 95%;
+  --primary: 250 70% 65%;
+  --primary-foreground: 250 10% 10%;
+  --secondary: 250 10% 20%;
+  --secondary-foreground: 0 0% 95%;
+  --muted: 250 10% 20%;
+  --muted-foreground: 250 5% 70%;
+  --accent: 250 70% 65%;
+  --accent-foreground: 250 10% 10%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 250 10% 25%;
+  --input: 250 10% 25%;
+  --ring: 250 70% 65%;
+
+  /* Parking-specific colors */
+  --gauge-green: 145 70% 70%;
+  --gauge-yellow: 45 90% 70%;
+  --gauge-red: 0 84% 65%;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+      'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+      sans-serif;
+  }
+}
+
+/* Estilos personalizados para scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--muted));
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary) / 0.5);
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+

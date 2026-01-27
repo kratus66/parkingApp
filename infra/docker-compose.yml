@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: parking_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: parking_user
+      POSTGRES_PASSWORD: parking_pass_2026
+      POSTGRES_DB: parking_system
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - '5433:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U parking_user -d parking_system']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - parking_network
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: parking_pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@parking.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+    ports:
+      - '5050:80'
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    networks:
+      - parking_network
+
+volumes:
+  postgres_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+networks:
+  parking_network:
+    driver: bridge

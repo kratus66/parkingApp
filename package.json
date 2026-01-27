@@ -1,0 +1,38 @@
+{
+  "name": "parking-system",
+  "version": "1.0.0",
+  "description": "Sistema de gestión de parqueaderos multi-empresa",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "api:dev": "cd apps/api && npm run start:dev",
+    "api:build": "cd apps/api && npm run build",
+    "api:start": "cd apps/api && npm run start:prod",
+    "api:migration:generate": "cd apps/api && npm run migration:generate",
+    "api:migration:run": "cd apps/api && npm run migration:run",
+    "api:seed": "cd apps/api && npm run seed",
+    "web:dev": "cd apps/web && npm run dev",
+    "web:build": "cd apps/web && npm run build",
+    "web:start": "cd apps/web && npm start",
+    "docker:up": "docker-compose -f infra/docker-compose.yml up -d",
+    "docker:down": "docker-compose -f infra/docker-compose.yml down",
+    "docker:logs": "docker-compose -f infra/docker-compose.yml logs -f",
+    "lint": "npm run lint --workspaces",
+    "format": "npm run format --workspaces"
+  },
+  "keywords": [
+    "parking",
+    "saas",
+    "nestjs",
+    "nextjs",
+    "postgresql"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "husky": "^8.0.3",
+    "lint-staged": "^15.2.0"
+  }
+}
