@@ -173,19 +173,38 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
       setIdentifyResult(result);
 
       if (result.found && result.vehicles && result.vehicles.length > 0) {
-        // Vehículo encontrado: pasar al paso de confirmación
-        setSelectedVehicleId(result.vehicles[0].id);
-        setLicensePlate(result.vehicles[0].plate || '');
-        setBicycleCode(result.vehicles[0].bicycleCode || '');
-        setBrand(result.vehicles[0].brand || '');
-        setModel(result.vehicles[0].model || '');
-        setColor(result.vehicles[0].color || '');
-        setIsNewCustomer(false);
-        setFullName(result.customer?.fullName || '');
-        setPhone(result.customer?.phone || '');
-        setEmail(result.customer?.email || '');
-        // Ir al paso de confirmación en lugar de check-in automático
-        setStep('confirm');
+        // Cliente encontrado con vehículos: 
+        // Si buscó por placa/código de bici, seleccionar ese vehículo e ir a confirmación
+        // Si buscó por documento, ir a paso vehicle para elegir vehículo o registrar nuevo
+        if (searchType === 'plate' || searchType === 'bikeCode') {
+          // Búsqueda por vehículo: ir directo a confirmación
+          setSelectedVehicleId(result.vehicles[0].id);
+          setLicensePlate(result.vehicles[0].plate || '');
+          setBicycleCode(result.vehicles[0].bicycleCode || '');
+          setBrand(result.vehicles[0].brand || '');
+          setModel(result.vehicles[0].model || '');
+          setColor(result.vehicles[0].color || '');
+          setVehicleType(result.vehicles[0].vehicleType as VehicleType);
+          setIsNewCustomer(false);
+          setFullName(result.customer?.fullName || '');
+          setPhone(result.customer?.phone || '');
+          setEmail(result.customer?.email || '');
+          setStep('confirm');
+        } else {
+          // Búsqueda por documento: ir a paso vehicle para elegir o registrar nuevo
+          setSelectedVehicleId(result.vehicles[0].id); // Pre-seleccionar el primero
+          setLicensePlate(result.vehicles[0].plate || '');
+          setBicycleCode(result.vehicles[0].bicycleCode || '');
+          setBrand(result.vehicles[0].brand || '');
+          setModel(result.vehicles[0].model || '');
+          setColor(result.vehicles[0].color || '');
+          setVehicleType(result.vehicles[0].vehicleType as VehicleType);
+          setIsNewCustomer(false);
+          setFullName(result.customer?.fullName || '');
+          setPhone(result.customer?.phone || '');
+          setEmail(result.customer?.email || '');
+          setStep('vehicle');
+        }
       } else if (result.found) {
         // Cliente encontrado pero sin vehículos: mostrar formulario para registrar vehículo
         setIsNewCustomer(false);
@@ -562,25 +581,58 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
                   {/* Sugerencias en tiempo real */}
                   {showSuggestions && suggestions && (suggestions.vehicles?.length || suggestions.customer) && (
                     <div className="absolute left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-lg z-50 max-h-56 overflow-y-auto">
-                      {suggestions.vehicles && suggestions.vehicles.length > 0 ? (
-                        suggestions.vehicles.map((v) => (
-                          <div
-                            key={v.id}
-                            className="px-4 py-2 hover:bg-blue-900 cursor-pointer text-white"
-                            onMouseDown={() => {
-                              setSearchValue(v.plate || v.bicycleCode || '');
-                              setIdentifyResult(suggestions);
-                              setShowSuggestions(false);
-                              setTimeout(() => handleIdentify(), 100);
-                            }}
-                          >
-                            {v.plate || v.bicycleCode} - {v.vehicleType} {v.brand ? `(${v.brand})` : ''}
+                      {/* Mostrar información del cliente primero cuando se busca por documento */}
+                      {searchType === 'document' && suggestions.customer && (
+                        <div 
+                          className="px-4 py-3 bg-green-500/10 border-b border-slate-700 cursor-pointer hover:bg-green-500/20"
+                          onMouseDown={() => {
+                            setIdentifyResult(suggestions);
+                            setShowSuggestions(false);
+                            setTimeout(() => handleIdentify(), 100);
+                          }}
+                        >
+                          <div className="text-white font-medium">
+                            ✓ {suggestions.customer.fullName}
                           </div>
-                        ))
-                      ) : (
-                        <div className="px-4 py-2 text-slate-400">Sin vehículos registrados</div>
+                          <div className="text-xs text-slate-400">
+                            Doc: {suggestions.customer.documentNumber}
+                          </div>
+                          <div className="text-xs text-green-400 mt-1">
+                            Click aquí para seleccionar o registrar vehículo
+                          </div>
+                        </div>
                       )}
-                      {suggestions.customer && (
+                      
+                      {suggestions.vehicles && suggestions.vehicles.length > 0 ? (
+                        <>
+                          {searchType !== 'document' && (
+                            <div className="px-4 py-2 text-xs text-slate-500 bg-slate-900/50">
+                              Vehículos encontrados:
+                            </div>
+                          )}
+                          {suggestions.vehicles.map((v) => (
+                            <div
+                              key={v.id}
+                              className="px-4 py-2 hover:bg-blue-900 cursor-pointer text-white"
+                              onMouseDown={() => {
+                                setSearchValue(v.plate || v.bicycleCode || '');
+                                setIdentifyResult(suggestions);
+                                setShowSuggestions(false);
+                                setTimeout(() => handleIdentify(), 100);
+                              }}
+                            >
+                              {v.plate || v.bicycleCode} - {v.vehicleType} {v.brand ? `(${v.brand})` : ''}
+                            </div>
+                          ))}
+                        </>
+                      ) : (
+                        searchType !== 'document' && (
+                          <div className="px-4 py-2 text-slate-400">Sin vehículos registrados</div>
+                        )
+                      )}
+                      
+                      {/* Mostrar info del cliente al final solo si NO es búsqueda por documento */}
+                      {searchType !== 'document' && suggestions.customer && (
                         <div className="px-4 py-2 text-xs text-slate-400 border-t border-slate-700">
                           Cliente: {suggestions.customer.fullName} ({suggestions.customer.documentNumber})
                         </div>
@@ -618,34 +670,65 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
             <div className="space-y-6">
               {identifyResult?.found && (
                 <div className="p-4 bg-green-500/10 border border-green-500/50 rounded-lg">
-                  <p className="text-green-400 font-medium">
+                  <p className="text-green-400 font-medium text-lg mb-2">
                     ✓ Cliente encontrado: {identifyResult.customer?.fullName}
                   </p>
+                  <div className="text-sm text-slate-300 space-y-1">
+                    <p><span className="font-medium">Documento:</span> {identifyResult.customer?.documentNumber}</p>
+                    {identifyResult.customer?.phone && (
+                      <p><span className="font-medium">Teléfono:</span> {identifyResult.customer?.phone}</p>
+                    )}
+                    {identifyResult.customer?.email && (
+                      <p><span className="font-medium">Email:</span> {identifyResult.customer?.email}</p>
+                    )}
+                  </div>
+                  
                   {identifyResult.vehicles && identifyResult.vehicles.length > 0 && (
                     <div className="mt-4">
                       <label className="block text-sm font-medium text-slate-300 mb-2">
-                        Selecciona un vehículo
+                        ¿Desea registrar un nuevo vehículo o usar uno existente?
                       </label>
                       <select
                         value={selectedVehicleId || ''}
-                        onChange={e => handleSelectVehicle(e.target.value)}
+                        onChange={e => {
+                          const vehicleId = e.target.value;
+                          if (vehicleId === '') {
+                            // Registrar nuevo vehículo: limpiar campos
+                            setSelectedVehicleId(null);
+                            setLicensePlate('');
+                            setBicycleCode('');
+                            setBrand('');
+                            setModel('');
+                            setColor('');
+                            setVehicleType('CAR');
+                          } else {
+                            // Vehículo existente: cargar datos
+                            handleSelectVehicle(vehicleId);
+                          }
+                        }}
                         className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
+                        <option value="">✨ Registrar nuevo vehículo para este cliente</option>
                         {identifyResult.vehicles.map(vehicle => (
                           <option key={vehicle.id} value={vehicle.id}>
-                            {vehicle.plate || vehicle.bicycleCode || 'Sin placa/código'} - {vehicle.vehicleType}
+                            {vehicle.plate || vehicle.bicycleCode || 'Sin placa/código'} - {vehicle.vehicleType} {vehicle.brand && `- ${vehicle.brand}`}
                           </option>
                         ))}
-                        <option value="">Registrar nuevo vehículo</option>
                       </select>
+                      <p className="mt-2 text-xs text-slate-400">
+                        {selectedVehicleId 
+                          ? 'Vehículo existente seleccionado. Puedes cambiar al formulario de nuevo vehículo.' 
+                          : 'Completa los datos del nuevo vehículo a continuación.'}
+                      </p>
                     </div>
                   )}
                 </div>
               )}
 
-              {(isNewCustomer || (!selectedVehicleId && identifyResult?.found)) && (
+              {/* Solo mostrar formulario de cliente si es nuevo (no se encontró en búsqueda) */}
+              {isNewCustomer && (
                 <div className="space-y-4 p-4 bg-blue-500/10 border border-blue-500/50 rounded-lg">
-                  <h3 className="text-white font-semibold">Datos del Cliente</h3>
+                  <h3 className="text-white font-semibold">Datos del Cliente Nuevo</h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-slate-300 mb-2">

@@ -29,7 +29,7 @@ export class SeedPricing1737476500000 {
       companyId,
       parkingLotId,
       defaultGraceMinutes: 15,
-      defaultDailyMax: 50000, // COP
+      defaultDailyMax: null, // Sin límite diario
       lostTicketFee: 20000, // COP
       enableDynamicPricing: false,
     });

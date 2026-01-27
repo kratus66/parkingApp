@@ -31,7 +31,7 @@ export function LiveQuote({ sessionId, autoRefresh = true }: LiveQuoteProps) {
     loadQuote();
 
     if (autoRefresh) {
-      const interval = setInterval(loadQuote, 60000); // Actualizar cada minuto
+      const interval = setInterval(loadQuote, 15000); // Actualizar cada 15s
       return () => clearInterval(interval);
     }
   }, [sessionId, autoRefresh]);
@@ -50,11 +50,55 @@ export function LiveQuote({ sessionId, autoRefresh = true }: LiveQuoteProps) {
       );
 
       if (!response.ok) {
-        throw new Error('Error al cargar cotización');
+        // Intentar extraer mensaje del backend
+        let backendMessage = 'Error al cargar cotización';
+        try {
+          const errorBody = await response.json();
+          backendMessage = errorBody?.message || backendMessage;
+        } catch (parseErr) {
+          // ignore
+        }
+        throw new Error(backendMessage);
       }
 
-      const data = await response.json();
-      setQuote(data);
+      const raw = await response.json();
+
+      // Manejar posibles envoltorios { data: { quote } } o { quote }
+      const payload = raw?.data?.quote || raw?.quote || raw?.data || raw;
+      const breakdown = payload?.breakdown || {};
+
+      const normalized: QuoteData = {
+        vehicleType: payload?.vehicleType || '',
+        entryAt: payload?.entryAt || payload?.entryDate || '',
+        exitAt: payload?.exitAt || payload?.exitDate || '',
+        totalMinutes: Number(
+          payload?.totalMinutes ?? payload?.durationMinutes ?? breakdown.totalMinutes ?? 0
+        ) || 0,
+        graceMinutesApplied: Number(
+          payload?.graceMinutesApplied ?? breakdown.graceAppliedMinutes ?? 0
+        ) || 0,
+        billableMinutes: Number(
+          payload?.billableMinutes ??
+          payload?.chargeableMinutes ??
+          breakdown.billableMinutes ??
+          payload?.totalMinutes ??
+          breakdown.totalMinutes ??
+          0
+        ) || 0,
+        subtotal: Number(
+          payload?.subtotal ?? payload?.amount ?? payload?.total ?? breakdown.subtotal ?? 0
+        ) || 0,
+        dailyMaxApplied: Boolean(
+          payload?.dailyMaxApplied ?? breakdown.dailyMaxApplied ?? payload?.maxApplied ?? false
+        ),
+        dailyMaxAmount: Number(
+          payload?.dailyMaxAmount ?? breakdown.dailyMaxAmount ?? payload?.dailyMax ?? 0
+        ) || 0,
+        lostTicketFee: Number(payload?.lostTicketFee ?? breakdown.lostTicketFee ?? 0) || 0,
+        total: Number(payload?.total ?? payload?.totalAmount ?? payload?.amount ?? 0) || 0,
+      };
+
+      setQuote(normalized);
     } catch (err) {
       console.error('Error loading quote:', err);
       setError(err instanceof Error ? err.message : 'Error desconocido');
@@ -72,8 +116,9 @@ export function LiveQuote({ sessionId, autoRefresh = true }: LiveQuoteProps) {
   };
 
   const formatDuration = (minutes: number) => {
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
+    const safeMinutes = Number.isFinite(minutes) ? minutes : 0;
+    const hours = Math.floor(safeMinutes / 60);
+    const mins = safeMinutes % 60;
     if (hours > 0) {
       return `${hours}h ${mins}min`;
     }

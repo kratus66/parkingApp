@@ -6,7 +6,11 @@ import { Car, Bike, Truck, Clock, MapPin, User, RefreshCw, LogOut, AlertTriangle
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { sessionService } from '@/lib/sessionService';
+import { checkoutApi } from '@/services/checkout.service';
+import { PaymentMethod } from '@/types/checkout';
 import { LiveQuote } from '@/components/LiveQuote';
+import { InvoiceReceipt } from '@/components/InvoiceReceipt';
+import { ReprintTicketModal } from '@/components/modals/ReprintTicketModal';
 
 interface ActiveSession {
   id: string;
@@ -40,6 +44,19 @@ export default function ActiveTicketsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [vehicleTypeFilter, setVehicleTypeFilter] = useState<string>('ALL');
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
+  const [checkoutSession, setCheckoutSession] = useState<{ id: string; ticket: string }>({ id: '', ticket: '' });
+  const [checkoutTotal, setCheckoutTotal] = useState(0);
+  const [checkoutMethod, setCheckoutMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
+  const [checkoutReceived, setCheckoutReceived] = useState('');
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [checkoutConfirming, setCheckoutConfirming] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [showInvoice, setShowInvoice] = useState(false);
+  const [invoiceData, setInvoiceData] = useState<any>(null);
+  const [reprintModalOpen, setReprintModalOpen] = useState(false);
+  const [reprintTicketNumber, setReprintTicketNumber] = useState('');
+  const [reprintSessionId, setReprintSessionId] = useState('');
 
   // ID del parqueadero (debería venir del contexto del usuario)
   const parkingLotId = 'b04f6eec-264b-4143-9b71-814b05d4ffc4';
@@ -91,15 +108,101 @@ export default function ActiveTicketsPage() {
   };
 
   const handleReprintTicket = async (sessionId: string, ticketNumber: string) => {
-    const reason = prompt('Motivo de la reimpresión:');
-    if (!reason) return;
+    setReprintSessionId(sessionId);
+    setReprintTicketNumber(ticketNumber);
+    setReprintModalOpen(true);
+  };
+
+  const handleCheckout = async (sessionId: string, ticketNumber: string) => {
+    try {
+      setCheckoutLoading(true);
+      setCheckoutError(null);
+
+      // Paso 1: Obtener preview del checkout
+      const previewData = await checkoutApi.preview(sessionId, false);
+      
+      // Paso 2: Mostrar los datos al usuario y solicitar información de pago
+      const total = previewData.data?.quote?.total || previewData.quote?.total || 0;
+      setCheckoutSession({ id: sessionId, ticket: ticketNumber });
+      setCheckoutTotal(total);
+      setCheckoutMethod(PaymentMethod.CASH);
+      setCheckoutReceived(total ? String(total) : '');
+      setCheckoutModalOpen(true);
+    } catch (err: any) {
+      console.error('Error checking out session:', err);
+      alert(err.response?.data?.message || err.message || 'Error al preparar el checkout');
+    }
+    finally {
+      setCheckoutLoading(false);
+    }
+  };
+
+  const confirmCheckout = async () => {
+    if (!checkoutSession.id) return;
+
+    // Solo permitir CASH por ahora
+    if (checkoutMethod !== PaymentMethod.CASH) {
+      setCheckoutError('Por ahora solo se puede pagar con efectivo. Tarjeta y transferencia se habilitarán próximamente.');
+      return;
+    }
+
+    const total = checkoutTotal || 0;
+    const receivedNumeric = parseInt(checkoutReceived || '0', 10) || 0;
+
+    if (receivedNumeric < total) {
+      setCheckoutError(`Monto insuficiente. Debe ser al menos ${new Intl.NumberFormat('es-CO', {
+        style: 'currency',
+        currency: 'COP',
+        minimumFractionDigits: 0,
+      }).format(total)}`);
+      return;
+    }
 
     try {
-      const result = await sessionService.reprintTicket({ sessionId, reason });
-      alert(`Ticket #${ticketNumber} reimpreso exitosamente (Reimpresión #${result.reprintCount})`);
+      setCheckoutConfirming(true);
+      setCheckoutError(null);
+
+      const confirmResult = await checkoutApi.confirm(checkoutSession.id, [
+        {
+          method: PaymentMethod.CASH,
+          amount: total,
+          receivedAmount: receivedNumeric,
+        },
+      ]);
+
+      // Preparar datos de la factura
+      const session = sessions.find(s => s.id === checkoutSession.id);
+      if (confirmResult && session) {
+        setInvoiceData({
+          invoiceNumber: confirmResult.invoice?.invoiceNumber || 'N/A',
+          issuedAt: confirmResult.invoice?.issuedAt || new Date().toISOString(),
+          ticketNumber: checkoutSession.ticket,
+          entryAt: session.entryAt,
+          exitAt: confirmResult.session?.exitAt || new Date().toISOString(),
+          vehicle: session.vehicle,
+          customer: session.vehicle?.customer,
+          parkingLot: { name: 'Parqueadero Centro', address: 'Calle 100 # 10-20, Bogotá' },
+          quote: {
+            totalMinutes: confirmResult.snapshot?.totalMinutes || 0,
+            billableMinutes: confirmResult.snapshot?.billableMinutes || 0,
+            graceMinutesApplied: confirmResult.snapshot?.graceMinutesApplied || 0,
+            subtotal: confirmResult.snapshot?.subtotal || total,
+            total: confirmResult.snapshot?.total || total,
+            dailyMaxApplied: confirmResult.snapshot?.dailyMaxApplied || false,
+            dailyMaxAmount: confirmResult.snapshot?.dailyMaxAmount || 0,
+          },
+          payment: confirmResult.payment || { items: [{ method: PaymentMethod.CASH, amount: total, receivedAmount: receivedNumeric, changeAmount: receivedNumeric - total }] },
+        });
+        setShowInvoice(true);
+      }
+
+      setCheckoutModalOpen(false);
+      loadActiveSessions();
     } catch (err: any) {
-      console.error('Error reprinting ticket:', err);
-      alert(err.message || 'Error al reimprimir ticket');
+      console.error('Error confirming checkout:', err);
+      setCheckoutError(err.response?.data?.message || err.message || 'Error al registrar salida');
+    } finally {
+      setCheckoutConfirming(false);
     }
   };
 
@@ -156,6 +259,12 @@ export default function ActiveTicketsPage() {
     if (minutes < 180) return 'text-yellow-400';
     return 'text-red-400';
   };
+
+  const formatCurrency = (amount: number) => new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP',
+    minimumFractionDigits: 0,
+  }).format(amount || 0);
 
   const filteredSessions = sessions.filter((session) => {
     const matchesSearch = !searchQuery || 
@@ -333,6 +442,30 @@ export default function ActiveTicketsPage() {
                   </div>
                 )}
 
+                {/* Vehicle Details */}
+                {(session.vehicle.brand || session.vehicle.model || session.vehicle.color) && (
+                  <div className="mb-3 text-sm space-y-1">
+                    {session.vehicle.brand && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Marca:</span>
+                        <span className="text-white font-medium">{session.vehicle.brand}</span>
+                      </div>
+                    )}
+                    {session.vehicle.model && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Modelo:</span>
+                        <span className="text-white font-medium">{session.vehicle.model}</span>
+                      </div>
+                    )}
+                    {session.vehicle.color && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Color:</span>
+                        <span className="text-white font-medium">{session.vehicle.color}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Customer */}
                 {session.vehicle.customer && (
                   <div className="flex items-center gap-2 mb-3 text-sm">
@@ -369,9 +502,7 @@ export default function ActiveTicketsPage() {
                 {/* Actions */}
                 <div className="mt-4 space-y-2">
                   <button
-                    onClick={() => {
-                      console.log('Registrar salida para:', session.ticketNumber);
-                    }}
+                    onClick={() => handleCheckout(session.id, session.ticketNumber)}
                     className="w-full px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
                   >
                     <LogOut className="w-4 h-4" />
@@ -414,6 +545,130 @@ export default function ActiveTicketsPage() {
           </div>
         )}
       </div>
+
+      {/* Modal de Checkout */}
+      {checkoutModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-lg bg-slate-900 border border-slate-700 shadow-2xl p-6">
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <p className="text-xs text-slate-400">Ticket</p>
+                <h3 className="text-lg font-semibold text-white">#{checkoutSession.ticket}</h3>
+              </div>
+              <button
+                className="text-slate-400 hover:text-white"
+                onClick={() => setCheckoutModalOpen(false)}
+                disabled={checkoutConfirming}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 mb-4">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400 text-sm">Total a cobrar</span>
+                <span className="text-xl font-bold text-white">{formatCurrency(checkoutTotal)}</span>
+              </div>
+
+              <div className="space-y-2">
+                <span className="text-slate-400 text-sm">Método de pago</span>
+                <div className="grid grid-cols-3 gap-2">
+                  {[PaymentMethod.CASH, PaymentMethod.CARD, PaymentMethod.TRANSFER].map((method) => (
+                    <button
+                      key={method}
+                      onClick={() => {
+                        if (method === PaymentMethod.CASH) {
+                          setCheckoutMethod(method);
+                        } else {
+                          setCheckoutError('Tarjeta y transferencia se habilitarán próximamente. Por ahora solo funciona efectivo.');
+                        }
+                      }}
+                      disabled={method !== PaymentMethod.CASH}
+                      className={`px-3 py-2 rounded-lg border text-sm transition-colors ${
+                        checkoutMethod === method
+                          ? 'border-blue-500 bg-blue-500/10 text-white'
+                          : method !== PaymentMethod.CASH
+                          ? 'border-slate-700 bg-slate-800 text-slate-400 opacity-50 cursor-not-allowed'
+                          : 'border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-500'
+                      }`}
+                    >
+                      {method === PaymentMethod.CASH && 'Efectivo'}
+                      {method === PaymentMethod.CARD && 'Tarjeta (próx.)'}
+                      {method === PaymentMethod.TRANSFER && 'Transferencia (próx.)'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {checkoutMethod === PaymentMethod.CASH && (
+                <div className="space-y-2">
+                  <label className="text-sm text-slate-400" htmlFor="receivedAmount">Monto recibido</label>
+                  <input
+                    id="receivedAmount"
+                    type="number"
+                    min={checkoutTotal}
+                    className="w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    value={checkoutReceived}
+                    onChange={(e) => setCheckoutReceived(e.target.value)}
+                  />
+                  <div className="text-sm text-slate-400">
+                    Cambio: <span className="font-semibold text-white">{formatCurrency(Math.max((parseInt(checkoutReceived || '0', 10) || 0) - (checkoutTotal || 0), 0))}</span>
+                  </div>
+                </div>
+              )}
+
+              {checkoutError && (
+                <div className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+                  {checkoutError}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <button
+                className="flex-1 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-slate-200 hover:border-slate-500"
+                onClick={() => setCheckoutModalOpen(false)}
+                disabled={checkoutConfirming}
+              >
+                Cancelar
+              </button>
+              <button
+                className="flex-1 rounded-lg bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:opacity-60"
+                onClick={confirmCheckout}
+                disabled={checkoutConfirming}
+              >
+                {checkoutConfirming ? 'Procesando...' : 'Registrar Salida'}
+              </button>
+            </div>
+
+            {checkoutLoading && (
+              <p className="mt-3 text-center text-xs text-slate-500">Preparando checkout...</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Invoice Receipt Modal */}
+      {showInvoice && invoiceData && (
+        <InvoiceReceipt 
+          invoiceData={invoiceData} 
+          onClose={() => {
+            setShowInvoice(false);
+            setInvoiceData(null);
+          }} 
+        />
+      )}
+
+      {/* Reprint Ticket Modal */}
+      <ReprintTicketModal
+        isOpen={reprintModalOpen}
+        ticketNumber={reprintTicketNumber}
+        sessionId={reprintSessionId}
+        onClose={() => {
+          setReprintModalOpen(false);
+          loadActiveSessions();
+        }}
+      />
     </div>
   );
 }

@@ -294,64 +294,80 @@ export class ParkingSessionsService {
   }
 
   async reprintTicket(reprintDto: ReprintTicketDto, operator: User) {
-    const session = await this.parkingSessionsRepository.findOne({
-      where: { id: reprintDto.sessionId },
-      relations: ['vehicle', 'spot', 'spot.zone'],
-    });
+    try {
+      const session = await this.parkingSessionsRepository.findOne({
+        where: { id: reprintDto.sessionId },
+        relations: ['vehicle', 'spot', 'spot.zone'],
+      });
 
-    if (!session) {
-      throw new NotFoundException('Sesión no encontrada');
-    }
+      if (!session) {
+        throw new NotFoundException('Sesión no encontrada');
+      }
 
-    if (session.status !== ParkingSessionStatus.ACTIVE) {
-      throw new BadRequestException('La sesión no está activa');
-    }
+      if (session.status !== ParkingSessionStatus.ACTIVE) {
+        throw new BadRequestException('La sesión no está activa');
+      }
 
-    // Incrementar contador de reimpresiones
-    session.ticketReprintedCount += 1;
-    await this.parkingSessionsRepository.save(session);
+      // Incrementar contador de reimpresiones
+      session.ticketReprintedCount = (session.ticketReprintedCount || 0) + 1;
+      await this.parkingSessionsRepository.save(session);
 
-    // Generar contenido del ticket
-    const ticketContent = await this.ticketTemplatesService.generateTicketContentSimple(
-      session,
-      session.spot?.code || 'N/A',
-      session.parkingLotId,
-      session.vehicle?.plate,
-      session.vehicle?.vehicleType,
-      session.entryAt,
-    );
+      // Generar contenido del ticket
+      const ticketContent = await this.ticketTemplatesService.generateTicketContentSimple(
+        session,
+        session.spot?.code || 'N/A',
+        session.parkingLotId,
+        session.vehicle?.plate,
+        session.vehicle?.vehicleType,
+        session.entryAt,
+      );
 
-    // Registrar reimpresión en log
-    await this.printLogsRepository.save({
-      companyId: operator.companyId,
-      parkingLotId: session.parkingLotId,
-      parkingSessionId: session.id,
-      action: TicketPrintAction.REPRINT,
-      actorUserId: operator.id,
-      reason: reprintDto.reason,
-      printedAt: new Date(),
-    });
+      // Registrar reimpresión en log
+      try {
+        await this.printLogsRepository.save({
+          companyId: operator.companyId,
+          parkingLotId: session.parkingLotId,
+          parkingSessionId: session.id,
+          action: TicketPrintAction.REPRINT,
+          actorUserId: operator.id,
+          reason: reprintDto.reason || null,
+          printedAt: new Date(),
+        });
+      } catch (err) {
+        console.error('Error saving print log:', err);
+        // Continuar aunque falle el log de impresión
+      }
 
-    // Registrar en AuditLog
-    await this.auditService.log({
-      action: 'REPRINT_TICKET',
-      entityType: 'ParkingSession',
-      entityId: session.id,
-      userId: operator.id,
-      companyId: operator.companyId,
-      metadata: {
-        ticketNumber: session.ticketNumber,
-        reason: reprintDto.reason,
+      // Registrar en AuditLog
+      try {
+        await this.auditService.log({
+          action: 'REPRINT_TICKET',
+          entityType: 'ParkingSession',
+          entityId: session.id,
+          userId: operator.id,
+          companyId: operator.companyId,
+          parkingLotId: session.parkingLotId,
+          metadata: {
+            ticketNumber: session.ticketNumber,
+            reason: reprintDto.reason || null,
+            reprintCount: session.ticketReprintedCount,
+          },
+        });
+      } catch (err) {
+        console.error('Error saving audit log:', err);
+        // Continuar aunque falle el audit log
+      }
+
+      return {
+        ticketContent,
+        reprintReason: reprintDto.reason || null,
         reprintCount: session.ticketReprintedCount,
-      },
-    });
-
-    return {
-      session,
-      ticketContent,
-      reprintReason: reprintDto.reason,
-      reprintCount: session.ticketReprintedCount,
-    };
+        message: 'Ticket reimpreso exitosamente',
+      };
+    } catch (error) {
+      console.error('Error in reprintTicket:', error);
+      throw error;
+    }
   }
 
   async cancelSession(cancelDto: CancelSessionDto, operator: User) {

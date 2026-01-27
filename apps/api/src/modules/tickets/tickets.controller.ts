@@ -76,7 +76,7 @@ export class TicketsController {
   }
 
   @Get('history')
-  @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
+  @Roles(UserRole.ADMIN, UserRole.SUPERVISOR, UserRole.CASHIER)
   @ApiOperation({ summary: 'Obtener historial de tickets' })
   @ApiQuery({ name: 'startDate', required: false, type: Date })
   @ApiQuery({ name: 'endDate', required: false, type: Date })

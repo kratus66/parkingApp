@@ -288,7 +288,7 @@ async function seed() {
       VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING id
     `,
-      [companyId, parkingLotId, 15, 50000, 20000, false],
+      [companyId, parkingLotId, 15, null, 20000, false],
     );
     console.log(`✅ Pricing config created: ${pricingConfigResult[0].id}`);
 
