@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { shiftsApi } from '../../../services/shifts.service';
 import { countsApi } from '../../../services/counts.service';
-import type { CashShift, CashCountMethod, CashDenomination } from '../../../types/cash';
+import type { CashShift, CashDenomination } from '../../../types/cash';
+import { CashCountMethod } from '../../../types/cash';
 
 const DENOMINATIONS = [
   100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50,
@@ -90,6 +91,7 @@ export default function CashCountPage() {
       });
 
       alert('Conteo de efectivo guardado');
+      router.push('/cash');
     } catch (error: any) {
       alert(error.response?.data?.message || 'Error al guardar');
     } finally {
@@ -109,6 +111,7 @@ export default function CashCountPage() {
       });
 
       alert(`Conteo de ${method} guardado`);
+      router.push('/cash');
     } catch (error: any) {
       alert(error.response?.data?.message || 'Error al guardar');
     } finally {

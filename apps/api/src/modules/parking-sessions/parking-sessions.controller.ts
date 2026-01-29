@@ -117,4 +117,37 @@ export class ParkingSessionsController {
   findByTicketNumber(@Param('ticketNumber') ticketNumber: string) {
     return this.parkingSessionsService.findByTicketNumber(ticketNumber);
   }
+
+  @Get('history')
+  @Roles(UserRole.CASHIER, UserRole.SUPERVISOR, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Obtener historial de sesiones (cerradas y canceladas)' })
+  @ApiResponse({ status: 200, description: 'Historial de sesiones' })
+  @ApiQuery({ name: 'parkingLotId', required: false })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'dateFrom', required: false })
+  @ApiQuery({ name: 'dateTo', required: false })
+  async getHistory(
+    @CurrentUser() user: User,
+    @Query('parkingLotId') parkingLotId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('status') status?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    const lotId = parkingLotId || user.parkingLotId;
+    return this.parkingSessionsService.findHistory({
+      parkingLotId: lotId,
+      page: page ? parseInt(page) : 1,
+      limit: limit ? parseInt(limit) : 15,
+      search,
+      status,
+      dateFrom: dateFrom ? new Date(dateFrom) : undefined,
+      dateTo: dateTo ? new Date(dateTo) : undefined,
+    });
+  }
 }

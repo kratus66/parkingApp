@@ -46,10 +46,16 @@ export const ReprintTicketModal: React.FC<ReprintTicketModalProps> = ({
       
       // Manejar respuesta anidada
       const actualData = result?.data || result;
-      setSessionData(actualData);
       
       if (!actualData) {
         setError('No se encontraron datos del ticket');
+        setSessionData(null);
+      } else {
+        console.log('🎫 Session Data Details:');
+        console.log('   Vehicle:', actualData.vehicle);
+        console.log('   Customer:', actualData.vehicle?.customer);
+        console.log('   Spot:', actualData.spot);
+        setSessionData(actualData);
       }
     } catch (err: any) {
       console.error('Error loading session data:', err);
@@ -71,6 +77,15 @@ export const ReprintTicketModal: React.FC<ReprintTicketModalProps> = ({
       setError(null);
       const result = await sessionService.reprintTicket({ sessionId, reason });
       console.log('Reprint result:', result);
+      
+      // Actualizar los datos de la sesión con la respuesta
+      if (result?.data) {
+        console.log('📄 Actualizando datos con respuesta del servidor:', result.data);
+        setSessionData(result.data);
+      } else if (result) {
+        console.log('📄 Usando datos existentes de la sesión');
+      }
+      
       // Mostrar preview inmediatamente
       setShowPreview(true);
     } catch (err: any) {
@@ -132,18 +147,53 @@ export const ReprintTicketModal: React.FC<ReprintTicketModalProps> = ({
                     </div>
                   </div>
                 </div>
+
+                {/* Vehicle Details */}
+                {(sessionData.vehicle?.brand || sessionData.vehicle?.model || sessionData.vehicle?.color) && (
+                  <div className="border-t border-slate-700 pt-3 grid grid-cols-3 gap-2 text-xs">
+                    {sessionData.vehicle?.brand && (
+                      <div>
+                        <div className="text-slate-400 mb-1">Marca</div>
+                        <div className="text-white">{sessionData.vehicle.brand}</div>
+                      </div>
+                    )}
+                    {sessionData.vehicle?.model && (
+                      <div>
+                        <div className="text-slate-400 mb-1">Modelo</div>
+                        <div className="text-white">{sessionData.vehicle.model}</div>
+                      </div>
+                    )}
+                    {sessionData.vehicle?.color && (
+                      <div>
+                        <div className="text-slate-400 mb-1">Color</div>
+                        <div className="text-white">{sessionData.vehicle.color}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="border-t border-slate-700 pt-3 grid grid-cols-2 gap-3">
                   <div>
                     <div className="text-slate-400 text-xs mb-1">Cliente</div>
                     <div className="text-white font-semibold text-sm">
-                      {sessionData.customer?.fullName || 'Sin cliente'}
+                      {sessionData.vehicle?.customer?.fullName || 'Sin cliente'}
                     </div>
+                    {sessionData.vehicle?.customer?.documentNumber && (
+                      <div className="text-slate-400 text-xs mt-1">
+                        {sessionData.vehicle.customer.documentNumber}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <div className="text-slate-400 text-xs mb-1">Puesto</div>
                     <div className="text-white font-semibold text-sm">
                       {sessionData.spot?.code || 'N/A'}
                     </div>
+                    {sessionData.spot?.zone && (
+                      <div className="text-slate-400 text-xs mt-1">
+                        {sessionData.spot.zone.name}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

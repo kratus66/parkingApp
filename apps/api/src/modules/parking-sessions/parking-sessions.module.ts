@@ -5,6 +5,7 @@ import { ParkingSessionsController } from './parking-sessions.controller';
 import { ParkingSession } from '../../entities/parking-session.entity';
 import { ParkingLotCounter } from '../../entities/parking-lot-counter.entity';
 import { TicketPrintLog } from '../../entities/ticket-print-log.entity';
+import { CustomerInvoice } from '../../entities/customer-invoice.entity';
 import { OccupancyModule } from '../occupancy/occupancy.module';
 import { TicketsModule } from '../tickets/tickets.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -18,6 +19,7 @@ import { ConsentsModule } from '../consents/consents.module';
       ParkingSession,
       ParkingLotCounter,
       TicketPrintLog,
+      CustomerInvoice,
     ]),
     OccupancyModule,
     TicketsModule,

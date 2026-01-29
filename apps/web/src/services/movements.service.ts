@@ -14,25 +14,25 @@ export const movementsApi = {
    * Registrar movimiento de caja
    */
   async create(dto: CreateMovementDto): Promise<CashMovement> {
-    const response = await axios.post<CashMovement>(
+    const response = await axios.post<{data: CashMovement}>(
       `${API_URL}/cash/movements`,
       dto,
       {
         headers: getAuthHeaders(),
       },
     );
-    return response.data;
+    return response.data.data;
   },
 
   /**
    * Listar movimientos de un turno
    */
   async findByShift(cashShiftId: string): Promise<CashMovement[]> {
-    const response = await axios.get<CashMovement[]>(`${API_URL}/cash/movements`, {
+    const response = await axios.get<{data: CashMovement[]}>(`${API_URL}/cash/movements`, {
       params: { cashShiftId },
       headers: getAuthHeaders(),
     });
-    return response.data;
+    return response.data.data;
   },
 
   /**

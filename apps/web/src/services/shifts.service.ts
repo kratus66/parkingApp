@@ -20,42 +20,42 @@ export const shiftsApi = {
    * Abrir turno de caja
    */
   async open(dto: OpenShiftDto): Promise<CashShift> {
-    const response = await axios.post<CashShift>(
+    const response = await axios.post<{data: CashShift}>(
       `${API_URL}/cash/shifts/open`,
       dto,
       {
         headers: getAuthHeaders(),
       },
     );
-    return response.data;
+    return response.data.data;
   },
 
   /**
    * Obtener turno actual abierto
    */
   async getCurrent(parkingLotId: string): Promise<CashShift | null> {
-    const response = await axios.get<CashShift | null>(
+    const response = await axios.get<{data: CashShift | null}>(
       `${API_URL}/cash/shifts/current`,
       {
         params: { parkingLotId },
         headers: getAuthHeaders(),
       },
     );
-    return response.data;
+    return response.data.data;
   },
 
   /**
    * Cerrar turno de caja
    */
   async close(shiftId: string, dto: CloseShiftDto): Promise<CashShift> {
-    const response = await axios.post<CashShift>(
+    const response = await axios.post<{data: CashShift}>(
       `${API_URL}/cash/shifts/${shiftId}/close`,
       dto,
       {
         headers: getAuthHeaders(),
       },
     );
-    return response.data;
+    return response.data.data;
   },
 
   /**
@@ -68,23 +68,23 @@ export const shiftsApi = {
     from?: string;
     to?: string;
   }): Promise<CashShift[]> {
-    const response = await axios.get<CashShift[]>(`${API_URL}/cash/shifts`, {
+    const response = await axios.get<{data: CashShift[]}>(`${API_URL}/cash/shifts`, {
       params,
       headers: getAuthHeaders(),
     });
-    return response.data;
+    return response.data.data;
   },
 
   /**
    * Obtener resumen detallado de turno
    */
   async getSummary(shiftId: string): Promise<ShiftSummary> {
-    const response = await axios.get<ShiftSummary>(
+    const response = await axios.get<{data: ShiftSummary}>(
       `${API_URL}/cash/shifts/${shiftId}/summary`,
       {
         headers: getAuthHeaders(),
       },
     );
-    return response.data;
+    return response.data.data;
   },
 };

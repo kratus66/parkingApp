@@ -14,24 +14,24 @@ export const countsApi = {
    * Registrar/actualizar conteo de arqueo (upsert)
    */
   async upsert(dto: CreateCountDto): Promise<CashCount> {
-    const response = await axios.post<CashCount>(
+    const response = await axios.post<{data: CashCount}>(
       `${API_URL}/cash/counts`,
       dto,
       {
         headers: getAuthHeaders(),
       },
     );
-    return response.data;
+    return response.data.data;
   },
 
   /**
    * Listar conteos de un turno
    */
   async findByShift(cashShiftId: string): Promise<CashCount[]> {
-    const response = await axios.get<CashCount[]>(`${API_URL}/cash/counts`, {
+    const response = await axios.get<{data: CashCount[]}>(`${API_URL}/cash/counts`, {
       params: { cashShiftId },
       headers: getAuthHeaders(),
     });
-    return response.data;
+    return response.data.data;
   },
 };

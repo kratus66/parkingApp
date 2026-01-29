@@ -29,10 +29,20 @@ export default function ZonesPage() {
   const loadZones = async () => {
     try {
       setLoading(true);
-      const response = await zoneService.list(parkingLotId);
-      setZones(response.data || response);
+      setError(null);
+      const response = await zoneService.list(parkingLotId, 1, 100);
+      
+      // La respuesta tiene la estructura { data: [...], meta: {...} }
+      if (response && response.data && Array.isArray(response.data)) {
+        setZones(response.data);
+      } else {
+        console.warn('Respuesta inesperada del API:', response);
+        setZones([]);
+      }
     } catch (err: any) {
+      console.error('Error loading zones:', err);
       setError(err.response?.data?.message || 'Error al cargar zonas');
+      setZones([]);
     } finally {
       setLoading(false);
     }
@@ -140,51 +150,61 @@ export default function ZonesPage() {
         )}
 
         {/* Lista de zonas */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {zones.map((zone) => (
-            <div key={zone.id} className="bg-slate-900 border border-slate-700 rounded-lg p-6">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="text-xl font-bold text-white">{zone.name}</h3>
-                  {zone.description && (
-                    <p className="text-slate-400 text-sm mt-1">{zone.description}</p>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleOpenModal(zone)}
-                    className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
-                  >
-                    <Edit className="w-4 h-4 text-blue-400" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(zone.id)}
-                    className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4 text-red-400" />
-                  </button>
-                </div>
-              </div>
-              
-              <div>
-                <p className="text-slate-400 text-sm mb-2">Tipos permitidos:</p>
-                <div className="flex flex-wrap gap-2">
-                  {zone.allowedVehicleTypes.map((type) => (
-                    <span
-                      key={type}
-                      className="px-2 py-1 bg-slate-800 text-slate-300 text-xs rounded"
+        {loading ? (
+          <div className="text-center text-slate-400 py-12">
+            Cargando zonas...
+          </div>
+        ) : zones.length === 0 ? (
+          <div className="text-center text-slate-400 py-12">
+            No hay zonas configuradas. Crea una nueva zona para comenzar.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {zones.map((zone) => (
+              <div key={zone.id} className="bg-slate-900 border border-slate-700 rounded-lg p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h3 className="text-xl font-bold text-white">{zone.name}</h3>
+                    {zone.description && (
+                      <p className="text-slate-400 text-sm mt-1">{zone.description}</p>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleOpenModal(zone)}
+                      className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
                     >
-                      {type === 'CAR' ? 'Autos' :
-                       type === 'MOTORCYCLE' ? 'Motos' :
-                       type === 'BICYCLE' ? 'Bicicletas' :
-                       'Camión/Bus'}
-                    </span>
-                  ))}
+                      <Edit className="w-4 h-4 text-blue-400" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(zone.id)}
+                      className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4 text-red-400" />
+                    </button>
+                  </div>
+                </div>
+                
+                <div>
+                  <p className="text-slate-400 text-sm mb-2">Tipos permitidos:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {zone.allowedVehicleTypes.map((type) => (
+                      <span
+                        key={type}
+                        className="px-2 py-1 bg-slate-800 text-slate-300 text-xs rounded"
+                      >
+                        {type === 'CAR' ? 'Autos' :
+                         type === 'MOTORCYCLE' ? 'Motos' :
+                         type === 'BICYCLE' ? 'Bicicletas' :
+                         'Camión/Bus'}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
         {/* Modal */}
         {showModal && (

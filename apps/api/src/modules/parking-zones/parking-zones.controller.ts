@@ -29,7 +29,7 @@ export class ParkingZonesController {
   constructor(private readonly zonesService: ParkingZonesService) {}
 
   @Get()
-  @Roles(UserRole.SUPERVISOR, UserRole.ADMIN)
+  @Roles(UserRole.CASHIER, UserRole.SUPERVISOR, UserRole.ADMIN)
   @ApiOperation({ summary: 'Buscar zonas con filtros y paginación' })
   @ApiResponse({ status: 200, description: 'Lista de zonas' })
   search(@Query() searchDto: SearchZonesDto, @CurrentUser() user: any) {
@@ -37,7 +37,7 @@ export class ParkingZonesController {
   }
 
   @Get(':id')
-  @Roles(UserRole.SUPERVISOR, UserRole.ADMIN)
+  @Roles(UserRole.CASHIER, UserRole.SUPERVISOR, UserRole.ADMIN)
   @ApiOperation({ summary: 'Obtener zona por ID' })
   @ApiResponse({ status: 200, description: 'Zona encontrada' })
   @ApiResponse({ status: 404, description: 'Zona no encontrada' })

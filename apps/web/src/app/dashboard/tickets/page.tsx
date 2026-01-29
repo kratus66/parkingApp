@@ -9,27 +9,28 @@ import { es } from 'date-fns/locale';
 interface Session {
   id: string;
   ticketNumber: string;
-  vehicleType: string;
-  licensePlate?: string;
-  bicycleCode?: string;
-  checkInTime: string;
-  checkOutTime?: string;
-  duration?: number;
   status: string;
+  entryAt: string;
+  exitAt?: string;
+  vehicle: {
+    vehicleType: string;
+    plate?: string;
+    bicycleCode?: string;
+    customer?: {
+      fullName: string;
+      documentNumber: string;
+    };
+  };
   spot?: {
     code: string;
-    zone: {
+    zone?: {
       name: string;
     };
   };
-  customer?: {
-    fullName: string;
-    documentNumber: string;
-  };
-  ticket?: {
-    totalAmount: number;
-    rateApplied: string;
-  };
+  invoices?: Array<{
+    total: number;
+    invoiceNumber: string;
+  }>;
 }
 
 interface SessionsResponse {
@@ -91,7 +92,7 @@ export default function TicketsPage() {
 
       const queryString = new URLSearchParams(params).toString();
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/tickets/history?${queryString}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/parking-sessions/history?${queryString}`,
         {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -110,6 +111,9 @@ export default function TicketsPage() {
       // Manejar respuesta anidada
       const actualData = result?.data || result;
       const sessionsData = Array.isArray(actualData?.data) ? actualData.data : (Array.isArray(actualData) ? actualData : []);
+      
+      console.log('Primera sesión con invoices:', sessionsData[0]?.invoices);
+      console.log('Primera sesión completa:', sessionsData[0]);
       
       setSessions(sessionsData);
       setTotalPages(actualData?.meta?.totalPages || 1);
@@ -131,13 +135,13 @@ export default function TicketsPage() {
   const getStatusBadge = (status: string) => {
     const styles: Record<string, string> = {
       'ACTIVE': 'bg-blue-900/50 text-blue-400 border-blue-600',
-      'COMPLETED': 'bg-green-900/50 text-green-400 border-green-600',
-      'CANCELLED': 'bg-red-900/50 text-red-400 border-red-600',
+      'CLOSED': 'bg-green-900/50 text-green-400 border-green-600',
+      'CANCELED': 'bg-red-900/50 text-red-400 border-red-600',
     };
     const labels: Record<string, string> = {
       'ACTIVE': 'Activo',
-      'COMPLETED': 'Completado',
-      'CANCELLED': 'Cancelado',
+      'CLOSED': 'Completado',
+      'CANCELED': 'Cancelado',
     };
     return (
       <span className={`px-2 py-1 text-xs font-semibold rounded-full border ${styles[status] || 'bg-gray-900/50 text-gray-400 border-gray-600'}`}>
@@ -217,9 +221,8 @@ export default function TicketsPage() {
                 className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="ALL">Todos los estados</option>
-                <option value="ACTIVE">Activos</option>
-                <option value="COMPLETED">Completados</option>
-                <option value="CANCELLED">Cancelados</option>
+                <option value="CLOSED">Completados</option>
+                <option value="CANCELED">Cancelados</option>
               </select>
             </div>
 
@@ -327,18 +330,18 @@ export default function TicketsPage() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm">
                           <div className="text-white font-semibold">
-                            {session.licensePlate || session.bicycleCode || 'N/A'}
+                            {session.vehicle?.plate || session.vehicle?.bicycleCode || 'N/A'}
                           </div>
                           <div className="text-slate-400 text-xs">
-                            {getVehicleTypeLabel(session.vehicleType)}
+                            {getVehicleTypeLabel(session.vehicle?.vehicleType || '')}
                           </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {session.customer ? (
+                        {session.vehicle?.customer ? (
                           <div className="text-sm">
-                            <div className="text-white">{session.customer.fullName}</div>
-                            <div className="text-slate-400 text-xs">{session.customer.documentNumber}</div>
+                            <div className="text-white">{session.vehicle.customer.fullName}</div>
+                            <div className="text-slate-400 text-xs">{session.vehicle.customer.documentNumber}</div>
                           </div>
                         ) : (
                           <span className="text-slate-400">-</span>
@@ -346,20 +349,20 @@ export default function TicketsPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-white">
-                          {format(new Date(session.checkInTime), 'dd/MM/yyyy', { locale: es })}
+                          {format(new Date(session.entryAt), 'dd/MM/yyyy', { locale: es })}
                         </div>
                         <div className="text-xs text-slate-400">
-                          {format(new Date(session.checkInTime), 'HH:mm', { locale: es })}
+                          {format(new Date(session.entryAt), 'HH:mm', { locale: es })}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {session.checkOutTime ? (
+                        {session.exitAt ? (
                           <>
                             <div className="text-sm text-white">
-                              {format(new Date(session.checkOutTime), 'dd/MM/yyyy', { locale: es })}
+                              {format(new Date(session.exitAt), 'dd/MM/yyyy', { locale: es })}
                             </div>
                             <div className="text-xs text-slate-400">
-                              {format(new Date(session.checkOutTime), 'HH:mm', { locale: es })}
+                              {format(new Date(session.exitAt), 'HH:mm', { locale: es })}
                             </div>
                           </>
                         ) : (
@@ -369,13 +372,13 @@ export default function TicketsPage() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-1 text-slate-300">
                           <Clock className="w-4 h-4" />
-                          <span className="text-sm">{formatDuration(session.duration)}</span>
+                          <span className="text-sm">{session.exitAt ? formatDuration(Math.floor((new Date(session.exitAt).getTime() - new Date(session.entryAt).getTime()) / 60000)) : '-'}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-1 text-green-400 font-semibold">
                           <DollarSign className="w-4 h-4" />
-                          <span className="text-sm">{formatCurrency(session.ticket?.totalAmount)}</span>
+                          <span className="text-sm">{formatCurrency(session.invoices?.[0]?.total)}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">

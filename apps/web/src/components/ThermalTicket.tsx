@@ -7,10 +7,14 @@ interface ThermalTicketProps {
   ticketData: {
     ticketNumber: string;
     entryAt: string;
-    spot: {
+    spot?: {
       code: string;
-      type: string;
-    };
+      spotType?: string;
+      type?: string;
+      zone?: {
+        name: string;
+      };
+    } | null;
     vehicle: {
       plate?: string;
       bicycleCode?: string;
@@ -18,10 +22,16 @@ interface ThermalTicketProps {
       brand?: string;
       model?: string;
       color?: string;
+      customer?: {
+        fullName: string;
+        documentNumber?: string;
+        phone?: string;
+        email?: string;
+      } | null;
     };
     customer?: {
       fullName: string;
-      documentType: string;
+      documentType?: string;
       documentNumber: string;
       phone?: string;
       email?: string;
@@ -154,11 +164,11 @@ export const ThermalTicket: React.FC<ThermalTicketProps> = ({ ticketData, onClos
 
               <div>
                 <div className="bold">PUESTO:</div>
-                <div className="big center">{ticketData.spot.code}</div>
+                <div className="big center">{ticketData.spot?.code || 'N/A'}</div>
                 <div className="small center">
-                  Tipo: {ticketData.spot.type === 'CAR' ? 'Auto' : 
-                         ticketData.spot.type === 'MOTORCYCLE' ? 'Moto' : 
-                         ticketData.spot.type === 'BICYCLE' ? 'Bicicleta' : 'Camión/Bus'}
+                  Tipo: {ticketData.vehicle.vehicleType === 'CAR' ? 'Auto' : 
+                         ticketData.vehicle.vehicleType === 'MOTORCYCLE' ? 'Moto' : 
+                         ticketData.vehicle.vehicleType === 'BICYCLE' ? 'Bicicleta' : 'Camión/Bus'}
                 </div>
               </div>
 
@@ -182,17 +192,21 @@ export const ThermalTicket: React.FC<ThermalTicketProps> = ({ ticketData, onClos
                 )}
               </div>
 
-              {ticketData.vehicle.vehicleType === 'BICYCLE' && ticketData.customer && (
+              {(ticketData.vehicle.vehicleType === 'BICYCLE' || ticketData.vehicle.customer || ticketData.customer) && (
                 <>
                   <div className="line"></div>
                   <div>
                     <div className="bold">CLIENTE:</div>
-                    <div>{ticketData.customer.fullName}</div>
-                    <div className="small">
-                      {ticketData.customer.documentType} {ticketData.customer.documentNumber}
-                    </div>
-                    {ticketData.customer.phone && (
-                      <div className="small">Tel: {ticketData.customer.phone}</div>
+                    <div>{ticketData.vehicle.customer?.fullName || ticketData.customer?.fullName || 'Sin cliente'}</div>
+                    {(ticketData.vehicle.customer?.documentNumber || ticketData.customer?.documentNumber) && (
+                      <div className="small">
+                        {ticketData.vehicle.customer?.documentNumber || ticketData.customer?.documentNumber}
+                      </div>
+                    )}
+                    {(ticketData.vehicle.customer?.phone || ticketData.customer?.phone) && (
+                      <div className="small">
+                        Tel: {ticketData.vehicle.customer?.phone || ticketData.customer?.phone}
+                      </div>
                     )}
                   </div>
                 </>

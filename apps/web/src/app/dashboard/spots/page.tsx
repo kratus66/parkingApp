@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { spotService, ParkingSpot } from '@/services/spotService';
 import { zoneService, ParkingZone } from '@/services/zoneService';
-import { Plus, Edit, Search, Filter } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
 
 export default function SpotsPage() {
   const [spots, setSpots] = useState<ParkingSpot[]>([]);
+  const [allSpots, setAllSpots] = useState<ParkingSpot[]>([]);
   const [zones, setZones] = useState<ParkingZone[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -21,17 +22,42 @@ export default function SpotsPage() {
     search: '',
   });
 
+  const applyFilters = (items: ParkingSpot[]) => {
+    const search = filters.search.trim().toLowerCase();
+    return items.filter((spot) => {
+      if (filters.zoneId && spot.zoneId !== filters.zoneId) return false;
+      if (filters.status && spot.status !== filters.status) return false;
+      if (filters.spotType && spot.spotType !== filters.spotType) return false;
+      if (search) {
+        const codeMatch = spot.code?.toLowerCase().includes(search);
+        const notesMatch = spot.notes?.toLowerCase().includes(search);
+        if (!codeMatch && !notesMatch) return false;
+      }
+      return true;
+    });
+  };
+
   const loadData = async () => {
     try {
       setLoading(true);
+      setError(null);
+
       const [spotsRes, zonesRes] = await Promise.all([
-        spotService.list({ parkingLotId, ...filters }),
+        spotService.list({ parkingLotId, page: 1, limit: 1000 }),
         zoneService.list(parkingLotId, 1, 100),
       ]);
-      setSpots(spotsRes.data || spotsRes);
-      setZones(zonesRes.data || zonesRes);
+
+      // Ambas respuestas tienen la estructura { data: [...], meta: {...} }
+      const fetchedSpots = spotsRes?.data || [];
+      setAllSpots(fetchedSpots);
+      setSpots(applyFilters(fetchedSpots));
+      setZones(zonesRes?.data || []);
     } catch (err: any) {
+      console.error('Error al cargar datos:', err);
       setError(err.response?.data?.message || 'Error al cargar datos');
+      setSpots([]);
+      setAllSpots([]);
+      setZones([]);
     } finally {
       setLoading(false);
     }
@@ -39,7 +65,11 @@ export default function SpotsPage() {
 
   useEffect(() => {
     loadData();
-  }, [filters]);
+  }, []);
+
+  useEffect(() => {
+    setSpots(applyFilters(allSpots));
+  }, [allSpots, filters.zoneId, filters.status, filters.spotType, filters.search]);
 
   const getStatusBadge = (status: string) => {
     const styles = {
@@ -100,6 +130,16 @@ export default function SpotsPage() {
 
         {/* Filtros */}
         <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-white font-semibold">Filtros</h3>
+            <button
+              type="button"
+              onClick={() => setFilters({ zoneId: '', status: '', spotType: '', search: '' })}
+              className="text-sm text-slate-400 hover:text-white"
+            >
+              Limpiar filtros
+            </button>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-slate-400 text-sm mb-2">Buscar por código</label>
@@ -123,7 +163,7 @@ export default function SpotsPage() {
                 className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white"
               >
                 <option value="">Todas las zonas</option>
-                {zones.map((zone) => (
+                {Array.isArray(zones) && zones.map((zone) => (
                   <option key={zone.id} value={zone.id}>{zone.name}</option>
                 ))}
               </select>
@@ -169,8 +209,13 @@ export default function SpotsPage() {
         )}
 
         {/* Grid de puestos */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
-          {spots.map((spot) => (
+        {loading ? (
+          <div className="text-center text-slate-400 py-12">
+            Cargando puestos...
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
+            {Array.isArray(spots) && spots.map((spot) => (
             <button
               key={spot.id}
               onClick={() => handleChangeStatus(spot.id, spot.status)}
@@ -200,10 +245,11 @@ export default function SpotsPage() {
                 )}
               </div>
             </button>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
-        {spots.length === 0 && !loading && (
+        {!loading && Array.isArray(spots) && spots.length === 0 && (
           <div className="text-center py-12 text-slate-400">
             No se encontraron puestos
           </div>

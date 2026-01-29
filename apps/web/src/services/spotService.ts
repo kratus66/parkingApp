@@ -41,6 +41,16 @@ export interface ChangeStatusDto {
   reason?: string;
 }
 
+export interface SpotsListResponse {
+  data: ParkingSpot[];
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+}
+
 export const spotService = {
   async list(params: {
     parkingLotId: string;
@@ -50,7 +60,7 @@ export const spotService = {
     page?: number;
     limit?: number;
     search?: string;
-  }) {
+  }): Promise<SpotsListResponse> {
     const queryParams = new URLSearchParams({
       parkingLotId: params.parkingLotId,
       page: (params.page || 1).toString(),
@@ -62,26 +72,26 @@ export const spotService = {
     if (params.spotType) queryParams.append('spotType', params.spotType);
     if (params.search) queryParams.append('search', params.search);
     
-    return api.get(`/parking-spots?${queryParams.toString()}`);
+    return api.get(`/spots?${queryParams.toString()}`);
   },
 
   async getById(id: string): Promise<ParkingSpot> {
-    return api.get(`/parking-spots/${id}`);
+    return api.get(`/spots/${id}`);
   },
 
   async create(data: CreateSpotDto): Promise<ParkingSpot> {
-    return api.post('/parking-spots', data);
+    return api.post('/spots', data);
   },
 
   async update(id: string, data: UpdateSpotDto): Promise<ParkingSpot> {
-    return api.patch(`/parking-spots/${id}`, data);
+    return api.patch(`/spots/${id}`, data);
   },
 
   async changeStatus(id: string, data: ChangeStatusDto): Promise<ParkingSpot> {
-    return api.post(`/parking-spots/${id}/status`, data);
+    return api.post(`/spots/${id}/status`, data);
   },
 
   async delete(id: string): Promise<void> {
-    return api.delete(`/parking-spots/${id}`);
+    return api.delete(`/spots/${id}`);
   },
 };

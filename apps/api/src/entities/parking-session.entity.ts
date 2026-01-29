@@ -3,6 +3,7 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
+  OneToMany,
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
@@ -13,6 +14,7 @@ import { Customer } from './customer.entity';
 import { Vehicle } from './vehicle-v2.entity';
 import { ParkingSpot } from './parking-spot.entity';
 import { User } from '../modules/users/entities/user.entity';
+import { CustomerInvoice } from './customer-invoice.entity';
 
 export enum ParkingSessionStatus {
   ACTIVE = 'ACTIVE',
@@ -113,4 +115,13 @@ export class ParkingSession {
   @ManyToOne(() => User, { nullable: true })
   @JoinColumn({ name: 'canceled_by_user_id' })
   canceledByUser: User;
+
+  @OneToMany(() => CustomerInvoice, (invoice) => invoice.parkingSession)
+  invoices: CustomerInvoice[];
+
+  // Para facilitar el acceso a la primera factura
+  get invoice(): CustomerInvoice | undefined {
+    return this.invoices?.[0];
+  }
 }
+

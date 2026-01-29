@@ -19,10 +19,13 @@ import { VehiclesV2Service } from '../vehicles-v2/vehicles-v2.service';
 import { CheckInDto, VehicleType } from './dto/sprint4-check-in.dto';
 import { ReprintTicketDto } from './dto/reprint-ticket.dto';
 import { CancelSessionDto } from './dto/cancel-session.dto';
+import { CustomerInvoice } from '../../entities/customer-invoice.entity';
 import { User } from '../users/entities/user.entity';
 import { AuditService } from '../audit/audit.service';
 import { ConsentsService } from '../consents/consents.service';
 import { ConsentChannel, ConsentStatus, ConsentSource } from '../../entities/consent.entity';
+import { CashPolicy } from '../../entities/cash-policy.entity';
+import { CashShift, CashShiftStatus } from '../../entities/cash-shift.entity';
 
 @Injectable()
 export class ParkingSessionsService {
@@ -33,6 +36,8 @@ export class ParkingSessionsService {
     private countersRepository: Repository<ParkingLotCounter>,
     @InjectRepository(TicketPrintLog)
     private printLogsRepository: Repository<TicketPrintLog>,
+    @InjectRepository(CustomerInvoice)
+    private invoiceRepository: Repository<CustomerInvoice>,
     private dataSource: DataSource,
     private ticketTemplatesService: TicketTemplatesService,
     private notificationsService: NotificationsService,
@@ -80,6 +85,27 @@ export class ParkingSessionsService {
         throw new BadRequestException(
           `El vehículo con placa ${checkInDto.vehiclePlate} ya tiene una sesión activa en el parqueadero (Ticket #${existingActiveSession.ticketNumber}, Puesto: ${existingActiveSession.spot?.code || 'N/A'}). Por favor, registre la salida antes de crear una nueva entrada.`,
         );
+      }
+
+      // 2.6. Validar que existe un turno de caja abierto (si la política lo requiere)
+      const policy = await queryRunner.manager.findOne(CashPolicy, {
+        where: { parkingLotId: checkInDto.parkingLotId, companyId: operator.companyId },
+      });
+
+      if (policy && policy.requireOpenShiftForCheckout) {
+        const openShift = await queryRunner.manager.findOne(CashShift, {
+          where: {
+            parkingLotId: checkInDto.parkingLotId,
+            cashierUserId: operator.id,
+            status: CashShiftStatus.OPEN,
+          },
+        });
+
+        if (!openShift) {
+          throw new BadRequestException(
+            'Debe abrir un turno de caja antes de registrar vehículos. Vaya a Caja > Abrir Turno.',
+          );
+        }
       }
 
       // 3. Buscar o validar el espacio de estacionamiento
@@ -297,7 +323,7 @@ export class ParkingSessionsService {
     try {
       const session = await this.parkingSessionsRepository.findOne({
         where: { id: reprintDto.sessionId },
-        relations: ['vehicle', 'spot', 'spot.zone'],
+        relations: ['vehicle', 'vehicle.customer', 'spot', 'spot.zone', 'parkingLot'],
       });
 
       if (!session) {
@@ -359,6 +385,7 @@ export class ParkingSessionsService {
       }
 
       return {
+        data: session,
         ticketContent,
         reprintReason: reprintDto.reason || null,
         reprintCount: session.ticketReprintedCount,
@@ -610,8 +637,79 @@ export class ParkingSessionsService {
   async findByTicketNumber(ticketNumber: string) {
     return this.parkingSessionsRepository.findOne({
       where: { ticketNumber },
-      relations: ['spot', 'parkingLot'],
+      relations: ['vehicle', 'vehicle.customer', 'spot', 'spot.zone', 'parkingLot'],
     });
+  }
+
+  /**
+   * Obtener historial de sesiones con filtros y paginación
+   */
+  async findHistory(options: {
+    parkingLotId: string;
+    page: number;
+    limit: number;
+    search?: string;
+    status?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
+  }) {
+    const { parkingLotId, page, limit, search, status, dateFrom, dateTo } = options;
+    
+    const query = this.parkingSessionsRepository.createQueryBuilder('session')
+      .leftJoinAndSelect('session.vehicle', 'vehicle')
+      .leftJoinAndSelect('vehicle.customer', 'customer')
+      .leftJoinAndSelect('session.spot', 'spot')
+      .leftJoinAndSelect('spot.zone', 'zone')
+      .leftJoinAndSelect('session.parkingLot', 'parkingLot')
+      .leftJoinAndSelect('session.invoices', 'invoice')
+      .where('session.parkingLotId = :parkingLotId', { parkingLotId })
+      .andWhere('session.status IN (:...statuses)', { 
+        statuses: ['CLOSED', 'CANCELED'] 
+      });
+
+    // Filtro por estado específico
+    if (status && status !== 'ALL') {
+      query.andWhere('session.status = :status', { status });
+    }
+
+    // Búsqueda por ticket, placa o cliente
+    if (search) {
+      query.andWhere(
+        '(session.ticketNumber LIKE :search OR vehicle.plate LIKE :search OR vehicle.bicycleCode LIKE :search OR customer.fullName LIKE :search)',
+        { search: `%${search}%` }
+      );
+    }
+
+    // Filtro por rango de fechas
+    if (dateFrom) {
+      query.andWhere('session.entryAt >= :dateFrom', { dateFrom });
+    }
+    if (dateTo) {
+      const endOfDay = new Date(dateTo);
+      endOfDay.setHours(23, 59, 59, 999);
+      query.andWhere('session.entryAt <= :dateTo', { dateTo: endOfDay });
+    }
+
+    // Contar total
+    const total = await query.getCount();
+
+    // Paginación
+    const skip = (page - 1) * limit;
+    const sessions = await query
+      .orderBy('session.exitAt', 'DESC')
+      .skip(skip)
+      .take(limit)
+      .getMany();
+
+    return {
+      data: sessions,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   }
 
   private async getNextTicketNumber(

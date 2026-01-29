@@ -12,6 +12,16 @@ export interface ParkingZone {
   updatedAt: string;
 }
 
+export interface ZonesListResponse {
+  data: ParkingZone[];
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+}
+
 export interface CreateZoneDto {
   parkingLotId: string;
   name: string;
@@ -27,7 +37,7 @@ export interface UpdateZoneDto {
 }
 
 export const zoneService = {
-  async list(parkingLotId: string, page = 1, limit = 10, search?: string) {
+  async list(parkingLotId: string, page = 1, limit = 100, search?: string): Promise<ZonesListResponse> {
     const params = new URLSearchParams({
       parkingLotId,
       page: page.toString(),
@@ -35,22 +45,22 @@ export const zoneService = {
     });
     if (search) params.append('search', search);
     
-    return api.get(`/parking-zones?${params.toString()}`);
+    return api.get(`/zones?${params.toString()}`);
   },
 
   async getById(id: string): Promise<ParkingZone> {
-    return api.get(`/parking-zones/${id}`);
+    return api.get(`/zones/${id}`);
   },
 
   async create(data: CreateZoneDto): Promise<ParkingZone> {
-    return api.post('/parking-zones', data);
+    return api.post('/zones', data);
   },
 
   async update(id: string, data: UpdateZoneDto): Promise<ParkingZone> {
-    return api.patch(`/parking-zones/${id}`, data);
+    return api.patch(`/zones/${id}`, data);
   },
 
   async delete(id: string): Promise<void> {
-    return api.delete(`/parking-zones/${id}`);
+    return api.delete(`/zones/${id}`);
   },
 };
