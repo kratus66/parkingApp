@@ -8,8 +8,10 @@ Sistema SaaS multi-empresa para la gestión integral de parqueaderos, construido
 | Documento | Contenido |
 |---|---|
 | **[docs/BUSINESS_LOGIC.md](docs/BUSINESS_LOGIC.md)** | **Lógica de negocio de punta a punta** (flujos, tarifas, caja, invariantes, hallazgos). Documento canónico. |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | **Plan de trabajo**: Sprint D (correcciones críticas), E (decisiones de negocio), F (endurecimiento), con criterios de aceptación |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Arquitectura técnica: módulos, entidades, seguridad, variables de entorno |
 | [QUICKSTART.md](QUICKSTART.md) | Puesta en marcha paso a paso |
+| [CLAUDE.md](CLAUDE.md) | Contexto para sesiones de desarrollo asistido (reglas del dominio, trampas conocidas) |
 | `SPRINT*.md`, `INFORME_*.md`, etc. (raíz) | **Históricos por sprint** — útiles como bitácora, pueden estar desactualizados; ante conflicto manda BUSINESS_LOGIC.md |
 
 ## ✨ Qué hace hoy
@@ -57,7 +59,7 @@ parkingApp/
 ├── apps/
 │   ├── api/              # Backend NestJS
 │   │   └── src/
-│   │       ├── modules/  # 22 módulos de negocio (ver docs/ARCHITECTURE.md)
+│   │       ├── modules/  # 23 módulos de negocio (ver docs/ARCHITECTURE.md)
 │   │       ├── entities/ # Entidades TypeORM compartidas
 │   │       ├── common/   # Guards, decorators, filters, interceptors
 │   │       ├── database/ # Data source, migraciones, seeds

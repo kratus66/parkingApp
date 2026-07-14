@@ -1,0 +1,157 @@
+# Roadmap de correcciones y evolución
+
+> Plan de trabajo priorizado a partir de la revisión completa de lógica de negocio
+> (2026-07-14). Los códigos **H#** refieren a los hallazgos de
+> [BUSINESS_LOGIC.md §10](BUSINESS_LOGIC.md#10-hallazgos-y-decisiones-abiertas) — usar esa
+> numeración en commits y conversaciones ("fix H4") para trazabilidad.
+>
+> **Estado de sprints previos**: Sprint A (flujo operativo) ✅ · Sprint B (convenios) ✅ ·
+> Sprint C (facturación DIAN-ready) ✅. Este roadmap define los sprints D, E y F.
+
+---
+
+## Sprint D — Correcciones críticas (dinero e integridad)
+
+Objetivo: que no exista forma de cobrar mal, perder dinero de vista, ni filtrar datos entre
+empresas. Todo es corrección de código sin decisiones de negocio pendientes.
+
+### D1. Eliminar la doble ruta de salida (H1) — el más importante
+
+- **Problema**: `CheckOutModal` (dashboard) llama `POST /parking-sessions/:id/check-out`
+  ([parking-sessions.service.ts:456](../apps/api/src/modules/parking-sessions/parking-sessions.service.ts))
+  que cobra con tarifas fijas en código ($3.000/h auto, etc.), sin motor de tarifas, sin
+  IVA/factura, sin `Payment` y sin caja. Dos cajeros pueden cobrar distinto por la misma
+  estancia y la vía rápida no deja rastro contable.
+- **Fix propuesto**:
+  1. Frontend: que `CheckOutModal` navegue a `/ops/checkout?sessionId=...` (o embeba el
+     mismo flujo preview→confirm de `checkoutApi`).
+  2. Backend: eliminar el endpoint legacy (o dejarlo devolviendo 410 con mensaje "use
+     /checkout/confirm"). No dejarlo silenciosamente activo.
+- **Aceptación**: no queda ningún camino en la UI ni endpoint activo que cierre una sesión
+  con cobro sin pasar por `checkout.confirm`. Toda salida genera factura + pago + snapshot.
+
+### D2. Recaudo del dashboard (H2)
+
+- **Problema**: `dailyRevenue` suma la tabla legacy `tickets`
+  ([ops.service.ts:212](../apps/api/src/modules/ops/ops.service.ts)) → siempre $0.
+- **Fix**: sumar `payments` con `status = PAID` del día (por `parkingLotId`), excluyendo
+  anulados. Opcional: desglose por método reutilizando `payments/stats`.
+- **Aceptación**: tras un checkout de prueba, el KPI "Recaudo del día" del dashboard refleja
+  el monto cobrado.
+
+### D3. Fugas multi-tenant (H4)
+
+- **Problema**: `GET /checkout/invoices/:id/html` no filtra por empresa
+  ([invoice.service.ts:142](../apps/api/src/modules/checkout/invoice.service.ts));
+  `GET /parking-sessions/by-ticket/:n` y `by-plate` tampoco.
+- **Fix**: pasar `companyId` del JWT a `generateInvoiceHtml` y a las búsquedas de sesiones;
+  filtrar en el `where`.
+- **Aceptación**: un usuario de la empresa B recibe 404 al pedir la factura/sesión de la
+  empresa A (probar con dos empresas seed o test e2e).
+
+### D4. Arqueo de caja por método (H5)
+
+- **Problema**: `expectedTotal` del cierre suma el total de **todos** los pagos
+  ([shifts.service.ts:200](../apps/api/src/modules/cash/services/shifts.service.ts)),
+  tratando tarjeta/transferencia como efectivo del cajón → diferencias falsas.
+- **Fix**: calcular esperado **por método** desde `payment_items`:
+  - Efectivo esperado = `openingFloat + Σ CASH(amount) + Σ INCOME − Σ EXPENSE`
+    (el cambio ya está descontado porque `amount` es lo cobrado, no lo recibido).
+  - Para CARD/TRANSFER/QR: esperado = Σ items de ese método (se compara contra el arqueo
+    del mismo método, que la UI ya captura).
+  - `difference` total = Σ (contado − esperado) por método; exponer el desglose en
+    `getShiftSummary`.
+- **Aceptación**: turno con 1 pago efectivo + 1 pago tarjeta cierra con diferencia $0 si el
+  arqueo registra cada método por separado.
+
+### D5. Notificaciones: entidad duplicada (H3)
+
+- **Problema**: dos clases `@Entity('notification_logs')` con columnas distintas
+  (`modules/notifications/entities/` vs `entities/notification-log.entity.ts`); los GET del
+  módulo devuelven 500.
+- **Fix**: dejar **una sola** entidad alineada con la migración real (la de
+  `entities/notification-log.entity.ts`: `parking_session_id`, `channel`, `template`,
+  `provider`, `payload`, `created_at`), actualizar `notifications.service` y borrar la
+  duplicada.
+- **Aceptación**: `GET /notifications/logs` y `/notifications/failed` responden 200.
+
+### D6. Concurrencia en contadores y asignación de puesto (H6)
+
+- **Problema**: contador de tickets (`getNextTicketNumber`) y contador de facturas de
+  respaldo (`getNextInvoiceNumber`) hacen read-modify-write sin lock; el check-in asigna
+  puesto sin lock pesimista (dos check-ins simultáneos pueden tomar el mismo puesto).
+- **Fix**:
+  - Contadores: `SELECT ... FOR UPDATE` (como ya hace `BillingService.nextNumber`) o
+    `UPDATE ... SET n = n + 1 RETURNING n`.
+  - Check-in: reutilizar el patrón de `occupancy.assignSpot` (lock pesimista dentro de la
+    transacción) en vez de `findAvailableSpot` + `occupySpot`.
+- **Aceptación**: script de 10 check-ins concurrentes no produce tickets duplicados ni
+  puestos doblemente asignados.
+
+### D7. Errores 500 evitables (H15 — arrastrado de la validación E2E)
+
+- **Fix**: `ParseUUIDPipe` en todos los `@Param('id')`; capturar violaciones de unique
+  (p. ej. festivo duplicado) → 409.
+- **Aceptación**: `GET /checkout/invoices/no-es-uuid` → 400; crear festivo duplicado → 409.
+
+---
+
+## Sprint E — Reglas de negocio del motor (requieren decisión del producto)
+
+Cada ítem tiene una **decisión previa** que tomar; el código hoy decide implícitamente.
+Recomendación marcada con ⭐.
+
+| Ítem | Comportamiento actual | Opciones |
+|---|---|---|
+| E1. Gracia (H7) | ≤15 min sale gratis; al minuto 16 se cobra TODO | (a) ⭐ dejarlo así (estándar del sector) y corregir el `billableMinutes` engañoso del breakdown; (b) descontar la gracia siempre |
+| E2. Tope diario (H8) | `dailyMax` capa toda la estancia una vez | ⭐ aplicarlo **por cada 24 h** (estancia de 3 días = 3 topes) |
+| E3. Planes tarifarios (H9) | El motor ignora si el plan está activo; reglas viejas siguen cobrando | ⭐ `findApplicableRule` debe hacer join con `tariff_plans.is_active = true`; `activateTariffPlan` ya desactiva los otros planes |
+| E4. Tiquete perdido (H10) | Checkout cobra `max($5.000, 20%)`; ignora `config.lostTicketFee` ($20.000) | ⭐ usar siempre `PricingConfig.lostTicketFee`; eliminar la fórmula hardcodeada del checkout |
+| E5. Anulaciones | `VOIDED` no reabre sesión, no ajusta caja, `Refund` sin uso | Definir semántica: ⭐ anulación con turno abierto genera `CashMovement EXPENSE` automático (devolución); implementar `Refund` si se quiere devolución formal; documentar que la sesión no se reabre |
+| E6. Política de caja en check-in (H13) | `requireOpenShiftForCheckout` también bloquea el check-in | (a) ⭐ separar en dos flags (`requireOpenShiftForCheckIn` / `ForCheckout`); (b) renombrar y documentar |
+| E7. Búsqueda por placa (H12) | `findActiveByPlate` sin filtro de empresa; con placas duplicadas devuelve cualquier sesión | Filtrar por `companyId` + iterar los vehículos encontrados |
+
+---
+
+## Sprint F — Endurecimiento y limpieza
+
+- **F1 (H14)**: migrar columnas de fecha a `timestamptz`; hacer que el motor use el
+  `timezone` del plan tarifario. Crítico antes de desplegar fuera de America/Bogota o de
+  transmitir facturas reales a la DIAN.
+- **F2 (H16)**: quitar URLs hardcodeadas `localhost:3002` en
+  `app/dashboard/pricing/*.tsx`, `pricing/simulator/page.tsx` y `components/LiveQuote.tsx`
+  (usar `lib/api.ts`); hacer que `main.ts` lea `CORS_ORIGIN` en vez del array hardcodeado.
+- **F3**: retirar módulos legacy `vehicles` (v1) y `tickets` (endpoints + tablas o al menos
+  desmontar los controladores). Si la **blacklist** interesa como feature, portarla a
+  `vehicles_v2` y consultarla en el check-in; si no, eliminarla.
+- **F4**: unificar el contrato de respuesta (doble envoltura `{data:{data,meta}}` del
+  `TransformInterceptor`) y tipar `ApiResponse<T>` en el front.
+- **F5**: limpiar `console.log` con PII (clientes, placas) de los servicios; reemplazar por
+  `Logger` de Nest con niveles.
+- **F6**: `checkout.confirm` debe liberar el puesto vía `releaseSpotSimple`/`releaseSpot`
+  (limpia `sessionId` + escribe `spot_status_history`) en vez de mutar el spot a mano (H11).
+- **F7**: ticket `YYYYMMDD-####`: reiniciar el consecutivo por día o quitar la fecha del
+  formato (hoy la fecha es cosmética).
+- **F8**: seguridad de sesión: expiración corta + refresh token, y migrar el token de
+  `localStorage` a cookie httpOnly.
+- **F9**: implementar el gateway realtime (hoy stub) o eliminarlo y estandarizar polling.
+
+## Backlog funcional (post-estabilización)
+
+- Transmisión real a la DIAN vía proveedor tecnológico (el módulo `billing` ya deja CUFE,
+  resolución y campos fiscales listos).
+- Notificaciones reales (WhatsApp/Email) sobre el registro de consentimientos ya existente.
+- Reportes: recaudo por periodo/método/cajero, ocupación histórica, exportes.
+- Mensualidades / planes para clientes frecuentes (los convenios ya cubren descuentos).
+- Reservas de puestos (el estado `RESERVED` existe pero no tiene flujo).
+
+---
+
+## Cómo verificar cada sprint
+
+1. **Unit**: `cd apps/api && npm test` (los 19 existentes + los que agregue cada fix).
+2. **E2E manual del camino del dinero** (guía en [QUICKSTART.md](../QUICKSTART.md) paso 8):
+   abrir turno → check-in → checkout (efectivo, mixto, gracia $0, tiquete perdido,
+   convenio) → arqueo → cierre. El recaudo del dashboard debe cuadrar con el cierre de caja.
+3. **Multi-tenant**: crear segunda empresa y verificar 404 cruzados (D3).
+4. **Builds**: `npm run api:build` y `npm run web:build` en verde.

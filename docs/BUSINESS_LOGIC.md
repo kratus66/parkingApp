@@ -174,7 +174,26 @@ unidad `HOUR`, redondeo `CEIL`, precios base 1.000/2.000/3.000/5.000 COP/h
 (bici/moto/auto/camión), multiplicador ×1.2 nocturno y ×1.3 festivo, cargo mínimo 50 % de la
 unidad; config: gracia 15 min, multa tiquete perdido $20.000.
 
-### 3.7 Política de caja (`cash_policies`)
+### 3.7 Resolución de facturación DIAN (`billing_resolutions`)
+
+Una por parqueadero (módulo `billing`, Sprint C). Define la numeración fiscal de las
+facturas: `prefix` + rango `rangeFrom`–`rangeTo` con `currentNumber`, número de resolución,
+vigencia, `technicalKey` (clave técnica para el CUFE) y `environment` (1 producción /
+2 pruebas). Gestión: consulta ADMIN/SUPERVISOR, edición solo ADMIN.
+
+- La numeración avanza **con lock pesimista** dentro de la transacción del checkout
+  (sin duplicados bajo concurrencia). Si el rango se agota → 409 "Solicite una nueva
+  resolución".
+- Si el parqueadero **no tiene** resolución activa, el checkout cae al contador simple
+  `INV-########` (⚠️ ese fallback no tiene lock — ver H6).
+- Régimen implementado: **responsable de IVA, el precio incluye IVA 19 %** — el
+  `FiscalService` extrae base gravable e IVA del total (`base = total / 1.19`) y calcula el
+  **CUFE** (SHA-384, estructura oficial DIAN). ⚠️ No hay firma ni transmisión real a la DIAN
+  (requiere proveedor tecnológico y clave técnica real); el CUFE es estructuralmente correcto
+  pero no válido ante la DIAN.
+- Seed demo: prefijo `FE`, rango 1000–5000, ambiente de pruebas.
+
+### 3.8 Política de caja (`cash_policies`)
 
 Una por parqueadero. Valores por defecto al crearla:
 
@@ -269,6 +288,7 @@ baseTotal      = PricingEngine(entryAt → now)                 [sección 5]
 lostTicketFee  = lostTicket ? max(5000, 20% × baseTotal) : 0  ⚠️ regla distinta a config.lostTicketFee
 discount       = convenio (explícito o del cliente), solo sobre baseTotal, tope baseTotal
 total          = baseTotal + lostTicketFee − discount
+IVA (informativo) = el total YA incluye IVA 19%: base = round(total/1.19), iva = total − base
 ```
 
 **5b. Confirm** (`POST /checkout/confirm`): transacción única que:
@@ -283,9 +303,13 @@ total          = baseTotal + lostTicketFee − discount
    - Efectivo con monto > 0: `receivedAmount ≥ amount`; el cambio se calcula y persiste.
    - **Salida en gracia (total $0)**: permitida sin exigir monto recibido.
 5. Persiste, en orden: `PricingSnapshot` (quote completo congelado — trazabilidad del precio),
-   `Payment` (`PAID`, vinculado al turno de caja) + `PaymentItem` por método,
-   `CustomerInvoice` (`ISSUED`, consecutivo `INV-########` por parqueadero) + ítem
-   "Servicio de parqueo".
+   `Payment` (`PAID`, vinculado al turno de caja) + `PaymentItem` por método, y la
+   `CustomerInvoice` (`ISSUED`) + ítem "Servicio de parqueo". **Numeración de la factura**:
+   si el parqueadero tiene resolución DIAN activa, usa `prefijo + consecutivo` del rango de
+   la resolución (con lock pesimista); si no, cae al contador simple `INV-########`.
+   La factura guarda además los **campos fiscales**: base gravable, tasa e importe de IVA
+   (19 % incluido en el precio), CUFE, número de resolución y ambiente
+   (ver [sección 3.7](#37-resolución-de-facturación-dian-billing_resolutions)).
 6. Cierra la sesión (`CLOSED`, `exitAt`, `closedByUserId`) y libera el puesto
    (⚠️ pone `FREE` directo: no limpia `sessionId` ni escribe `spot_status_history`).
 7. Escribe 4 `AuditLog` (checkout, liberación, pago, factura).
@@ -438,7 +462,8 @@ Consent:         historial GRANTED/REVOKED; el más reciente por canal es el vig
    vehículos motorizados sin bicycleCode.
 4. Un vehículo tiene **como máximo una sesión ACTIVE por parqueadero**.
 5. Solo se parquean vehículos registrados (v2) y en puestos `FREE` de su tipo.
-6. Números de ticket y de factura son consecutivos **por parqueadero**.
+6. Números de ticket y de factura son consecutivos **por parqueadero** (facturas: dentro del
+   rango de la resolución DIAN si está configurada, con tope duro al agotarse).
 7. El precio siempre se calcula en el servidor al momento del confirm, y queda congelado en
    `PricingSnapshot` junto a la factura.
 8. La suma de los medios de pago debe igualar exactamente el total; el efectivo exige
@@ -483,7 +508,7 @@ Resumen priorizado de lo que el código hace hoy y requiere corrección o decisi
 | H3 | **Módulo notificaciones roto**: hay dos clases `NotificationLog` mapeando la misma tabla con columnas distintas (`session_id`/`sent_at` vs `parking_session_id`/`created_at`); los GET devuelven 500. Unificar en una sola entidad alineada con la migración. | `modules/notifications/entities/` vs `entities/notification-log.entity.ts` |
 | H4 | **Fugas multi-tenant**: `GET /checkout/invoices/:id/html` no filtra por empresa (cualquier usuario autenticado de otra empresa puede leer la factura por UUID); `GET /parking-sessions/by-ticket/:n` y `by-plate` tampoco scopean por empresa. | `invoice.service.ts:142`, `parking-sessions.service.ts:611-641` |
 | H5 | **Cierre de caja mezcla métodos**: `expectedTotal` suma pagos con tarjeta/transferencia como si fueran efectivo del cajón → diferencias falsas en el arqueo. Separar esperado por método. | `shifts.service.ts:200` |
-| H6 | **Concurrencia**: contadores de ticket/factura se incrementan con read-modify-write sin lock (duplicados posibles); el check-in asigna puesto sin lock pesimista (doble asignación posible — `assignSpot` sí lo hace bien, pero el check-in no lo usa). | `parking-sessions.service.ts:715`, `checkout.service.ts:428`, `occupancy.service.ts:289-329` |
+| H6 | **Concurrencia**: el contador de **tickets** y el contador de facturas **de respaldo** (`INV-########`, usado cuando no hay resolución DIAN) se incrementan con read-modify-write sin lock (duplicados posibles); el check-in asigna puesto sin lock pesimista (doble asignación posible — `assignSpot` sí lo hace bien, pero el check-in no lo usa). *Nota: la numeración por resolución DIAN (Sprint C) SÍ tiene lock pesimista.* | `parking-sessions.service.ts:715`, `checkout.service.ts` (`getNextInvoiceNumber`), `occupancy.service.ts:289-329` |
 
 ### Medios (consistencia / reglas)
 

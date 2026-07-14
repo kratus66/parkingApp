@@ -36,7 +36,7 @@ parkingApp/
 
 ## Módulos del Backend
 
-22 módulos en `apps/api/src/modules/`. Agrupados por dominio:
+23 módulos en `apps/api/src/modules/`. Agrupados por dominio:
 
 ### Núcleo / plataforma
 | Módulo | Responsabilidad |
@@ -64,7 +64,8 @@ parkingApp/
 | `parking-sessions` | Check-in transaccional, sesiones activas, reimpresión, cancelación, historial, contador de tickets por lot |
 | `occupancy` | Resumen de ocupación, asignación/liberación de puestos (con lock pesimista en `assignSpot`) |
 | `pricing` | CRUD de planes/reglas/config + `pricing-engine` (cálculo por segmentos día/noche/festivo) + simulador |
-| `checkout` | **Salida vigente**: preview/confirm, snapshot de precio, pago multi-método, factura consecutiva + HTML imprimible |
+| `checkout` | **Salida vigente**: preview/confirm, snapshot de precio, pago multi-método, factura con desglose de IVA 19 % + CUFE + HTML imprimible |
+| `billing` | Facturación fiscal (Sprint C): `BillingResolution` por parqueadero (numeración DIAN con lock), `FiscalService` (IVA incluido, CUFE SHA-384). Sin transmisión real a la DIAN |
 | `payments` | Consulta de pagos, estadísticas por método, anulación (SUPERVISOR/ADMIN) |
 | `cash` | Turnos de caja (abrir/cerrar), movimientos INCOME/EXPENSE, arqueos por denominación, política por parqueadero |
 | `notifications` | Registro de notificaciones (proveedor **mock**; entidad hoy desincronizada de la tabla — ver BUSINESS_LOGIC H3) |
@@ -97,7 +98,8 @@ ParkingSession 1─N CustomerInvoice (1─1 en la práctica) / 1─1 PricingSnap
 Payment N─1 ParkingSession, 1─N PaymentItem, N─1 CashShift (opcional)
 CashShift 1─N CashMovement / CashCount;  CashPolicy 1─1 ParkingLot
 TariffPlan 1─N TariffRule;  PricingConfig 1─1 ParkingLot
-ParkingLotCounter / InvoiceCounter: consecutivos por parqueadero
+BillingResolution 1─1 ParkingLot (numeración fiscal DIAN)
+ParkingLotCounter / InvoiceCounter: consecutivos por parqueadero (InvoiceCounter es el respaldo cuando no hay resolución)
 ```
 
 ## Seguridad
@@ -127,7 +129,8 @@ frontend lo maneja defensivamente (`obj?.data?.id ?? obj?.id`). Deuda transversa
 - Seeds (`npm run seed`): 1 empresa, 1 parqueadero ("Parqueadero Centro"), 3 usuarios demo,
   4 zonas / 50 puestos (20 autos, 15 motos, 5 camiones, 10 bicis), 2 clientes con vehículos y
   consentimientos, plan "Tarifa Base 2026" (24 reglas), config de pricing (gracia 15 min,
-  multa $20.000) y festivos CO 2026.
+  multa $20.000), resolución de facturación demo (prefijo FE, rango 1000–5000, ambiente
+  pruebas) y festivos CO 2026.
 - ⚠️ Columnas de fecha como `timestamp` **sin** zona horaria; el cálculo de tarifas depende
   de la TZ del servidor (BUSINESS_LOGIC H14).
 
