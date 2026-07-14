@@ -8,19 +8,14 @@
 ## Paso 1: Instalar dependencias
 
 ```bash
-# Desde la raíz del proyecto
-cd c:/Users/Usuario/Desktop/parking_app
-
-# Instalar dependencias raíz
+# Desde la raíz del repo (parkingApp/)
 npm install
 
-# Instalar dependencias backend
-cd apps/api
-npm install
+# Backend
+cd apps/api && npm install
 
-# Instalar dependencias frontend
-cd ../web
-npm install
+# Frontend
+cd ../web && npm install
 
 # Volver a raíz
 cd ../..
@@ -34,23 +29,29 @@ cd apps/api
 cp .env.example .env
 ```
 
-Edita `apps/api/.env` si necesitas cambiar algo (los valores por defecto funcionan).
+Ajusta en `apps/api/.env`:
+
+```env
+PORT=3001
+DB_PORT=5433        # ¡ojo! el compose publica Postgres en 5433, no 5432
+```
 
 ### Frontend
 ```bash
 cd apps/web
 cp .env.example .env.local
+# NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1
 ```
 
 ## Paso 3: Levantar base de datos
 
 ```bash
 # Desde la raíz
-npm run docker:up
-
-# Espera unos segundos y verifica que esté corriendo
-npm run docker:logs
+npm run docker:up          # o: docker compose -f infra/docker-compose.yml up -d
+npm run docker:logs        # verificar que postgres esté healthy
 ```
+
+Levanta **PostgreSQL 15** (host `5433`) y **pgAdmin** (`http://localhost:5051`).
 
 ## Paso 4: Ejecutar migraciones
 
@@ -65,9 +66,12 @@ npm run migration:run
 npm run seed
 ```
 
-Esto creará:
-- 1 empresa demo
-- 1 parqueadero demo
+Esto crea:
+- 1 empresa y el parqueadero **"Parqueadero Centro"** con 4 zonas y 50 puestos
+  (20 autos, 15 motos, 5 camiones/buses, 10 bicicletas)
+- Plan tarifario **"Tarifa Base 2026"** (24 reglas) + config (gracia 15 min, multa $20.000)
+- Festivos de Colombia 2026
+- 2 clientes demo con vehículos y consentimientos
 - 3 usuarios:
   - **Admin**: admin@demo.com / Admin123*
   - **Supervisor**: supervisor@demo.com / Super123*
@@ -80,7 +84,7 @@ Esto creará:
 npm run api:dev
 ```
 
-✅ API corriendo en: http://localhost:3001/api/v1
+✅ API: http://localhost:3001/api/v1
 ✅ Swagger: http://localhost:3001/docs
 
 ## Paso 7: Iniciar frontend
@@ -88,28 +92,37 @@ npm run api:dev
 En otra terminal:
 
 ```bash
-# Desde apps/web o desde raíz
-npm run web:dev
+cd apps/web
+npx next dev -p 3003
 ```
 
-✅ Frontend: http://localhost:3000
+✅ Frontend: http://localhost:3003
 
-## Paso 8: Probar
+> ⚠️ **El CORS del backend está hardcodeado** (`apps/api/src/main.ts`) a los puertos
+> **3000, 3003 y 3005**. Si corres el frontend en otro puerto, las peticiones fallarán por
+> CORS. `npm run web:dev` usa 3000 por defecto; si 3000 está ocupado por otro proyecto, usa
+> `-p 3003` como arriba.
 
-1. Ve a http://localhost:3000
-2. Click en "Iniciar Sesión"
-3. Usa: admin@demo.com / Admin123*
-4. ¡Listo! Estás en el dashboard
+## Paso 8: Probar el flujo completo
+
+1. Ve a http://localhost:3003/login → `cajero@demo.com` / `Cajero123*`
+2. **Caja → Abrir turno** (ingresa una base, p. ej. $50.000) — la política por defecto exige
+   turno abierto para operar
+3. **Dashboard → Registrar entrada**: escribe una placa; si no existe, el modal crea cliente
+   y vehículo y luego hace el check-in → ticket térmico
+4. **Operaciones → Checkout**: busca por placa/ticket → preview con el motor de tarifas →
+   cobra (efectivo con cambio, tarjeta, etc.) → factura imprimible
+5. **Caja → Arqueo** (cuenta por denominaciones) y **Cerrar turno** → esperado vs. contado
+
+El detalle de todas las reglas está en [docs/BUSINESS_LOGIC.md](docs/BUSINESS_LOGIC.md).
 
 ## URLs importantes
 
-- **Frontend**: http://localhost:3000
+- **Frontend**: http://localhost:3003 (o 3000/3005 — ver nota de CORS)
 - **Backend API**: http://localhost:3001/api/v1
 - **Swagger**: http://localhost:3001/docs
-- **PostgreSQL**: localhost:5432
-- **pgAdmin**: http://localhost:5050
-  - Email: admin@parking.com
-  - Password: admin123
+- **PostgreSQL**: localhost:**5433** (usuario `parking_user`)
+- **pgAdmin**: http://localhost:**5051** — admin@parking.com / admin123
 
 ## Comandos útiles
 
@@ -117,59 +130,51 @@ npm run web:dev
 # Desde la raíz del proyecto
 
 # Docker
-npm run docker:up        # Levantar PostgreSQL
-npm run docker:down      # Detener PostgreSQL
+npm run docker:up        # Levantar PostgreSQL + pgAdmin
+npm run docker:down      # Detener
 npm run docker:logs      # Ver logs
 
 # Backend
 npm run api:dev          # Desarrollo
 npm run api:build        # Compilar
-npm run api:migration:run     # Ejecutar migraciones
-npm run api:seed         # Ejecutar seeds
 
 # Frontend
-npm run web:dev          # Desarrollo
+npm run web:dev          # Desarrollo (puerto 3000)
 npm run web:build        # Compilar
 
-# Linting
-npm run lint             # Ejecutar linters en todo
-npm run format           # Formatear código
+# Calidad
+npm run lint
+npm run format
 ```
 
 ## Troubleshooting
 
 ### Error: "ECONNREFUSED" al conectar a la DB
-- Verifica que Docker esté corriendo
-- Ejecuta `npm run docker:up` y espera unos segundos
+- Verifica que Docker esté corriendo y `npm run docker:up` haya terminado
+- Confirma `DB_PORT=5433` en `apps/api/.env` (el compose **no** publica en 5432)
 
 ### Error: "relation does not exist"
 - Ejecuta las migraciones: `cd apps/api && npm run migration:run`
 
-### Puerto 3000 o 3001 ya en uso
-- Cambia el puerto en las variables de entorno
-- O detén el proceso que usa ese puerto
+### El frontend carga pero todas las llamadas fallan (CORS / Network Error)
+- El frontend debe correr en 3000, 3003 o 3005 (CORS hardcodeado en `main.ts`)
+- Verifica `NEXT_PUBLIC_API_URL` en `apps/web/.env.local`
+- Nota: las pantallas de **pricing** y el **simulador** tienen la URL del API hardcodeada a
+  `localhost:3002` (bug conocido — BUSINESS_LOGIC H16); fallarán aunque el resto funcione
 
-### Error al instalar dependencias
-- Verifica tu versión de Node: `node --version` (debe ser 18+)
-- Limpia caché: `npm cache clean --force`
-- Elimina node_modules y vuelve a instalar
+### "Debe abrir un turno de caja antes de registrar vehículos"
+- Es la política de caja por defecto: abre turno en **Caja → Abrir Turno** con el usuario
+  cajero, o desactívala vía `PATCH /cash/policy` (SUPERVISOR/ADMIN)
+
+### Puerto 3000/3001 ya en uso
+- Frontend: usa `-p 3003` o `-p 3005`
+- Backend: cambia `PORT` en `.env` (y recuerda actualizar `NEXT_PUBLIC_API_URL`)
 
 ## Próximos pasos
 
-Una vez que todo esté funcionando:
-
-1. Lee [ARCHITECTURE.md](docs/ARCHITECTURE.md) para entender la estructura
-2. Revisa [SPRINTS.md](docs/SPRINTS.md) para ver el roadmap
-3. Explora el código en `apps/api/src` y `apps/web/src`
-4. Prueba los endpoints en Swagger: http://localhost:3001/docs
-5. ¡Empieza a construir los siguientes sprints!
-
-## Soporte
-
-Si encuentras problemas:
-1. Revisa los logs de Docker: `npm run docker:logs`
-2. Revisa los logs del backend (en la terminal donde corre)
-3. Verifica las variables de entorno
+1. Lee [docs/BUSINESS_LOGIC.md](docs/BUSINESS_LOGIC.md) — la lógica de negocio de punta a punta
+2. Revisa [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — estructura técnica
+3. Prueba los endpoints en Swagger: http://localhost:3001/docs
 
 ---
 

@@ -20,6 +20,8 @@ import { CashPolicy } from '../../entities/cash-policy.entity';
 import { PricingModule } from '../pricing/pricing.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { OccupancyModule } from '../occupancy/occupancy.module';
+import { AgreementsModule } from '../agreements/agreements.module';
+import { BillingModule } from '../billing/billing.module';
 import { InvoiceService } from './invoice.service';
 
 @Module({
@@ -44,6 +46,8 @@ import { InvoiceService } from './invoice.service';
     PricingModule,
     NotificationsModule,
     OccupancyModule,
+    AgreementsModule,
+    BillingModule,
   ],
   controllers: [CheckoutController],
   providers: [CheckoutService, InvoiceService],

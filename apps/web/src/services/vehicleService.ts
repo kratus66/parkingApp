@@ -24,6 +24,17 @@ export interface Vehicle {
   };
 }
 
+export interface CreateVehicleDto {
+  customerId: string;
+  vehicleType: Vehicle['vehicleType'];
+  plate?: string;
+  bicycleCode?: string;
+  brand?: string;
+  model?: string;
+  color?: string;
+  notes?: string;
+}
+
 export interface SearchVehiclesParams {
   query?: string;
   page?: number;
@@ -50,11 +61,11 @@ export const vehicleService = {
     return api.get(`/vehicles-v2/${id}`);
   },
 
-  async update(id: string, data: any): Promise<Vehicle> {
+  async update(id: string, data: Partial<CreateVehicleDto>): Promise<Vehicle> {
     return api.patch(`/vehicles-v2/${id}`, data);
   },
 
-  async create(data: any): Promise<Vehicle> {
+  async create(data: CreateVehicleDto): Promise<Vehicle> {
     return api.post('/vehicles-v2', data);
   },
 };

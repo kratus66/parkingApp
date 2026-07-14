@@ -15,7 +15,8 @@ import {
   X,
   DollarSign,
   Calculator,
-  Wallet
+  Wallet,
+  Handshake
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -56,6 +57,11 @@ const navItems: NavItem[] = [
     label: 'Caja',
     href: '/cash',
     icon: Wallet,
+  },
+  {
+    label: 'Convenios',
+    href: '/dashboard/agreements',
+    icon: Handshake,
   },
   {
     label: 'Zonas',

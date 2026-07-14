@@ -7,6 +7,13 @@ import { countsApi } from '../../../services/counts.service';
 import type { CashShift, CashDenomination } from '../../../types/cash';
 import { CashCountMethod } from '../../../types/cash';
 
+// Métodos de conteo distintos a efectivo (el efectivo se cuenta por denominaciones)
+type NonCashMethod =
+  | CashCountMethod.CARD
+  | CashCountMethod.TRANSFER
+  | CashCountMethod.QR
+  | CashCountMethod.OTHER;
+
 const DENOMINATIONS = [
   100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50,
 ];
@@ -26,7 +33,7 @@ export default function CashCountPage() {
   );
 
   // Other methods
-  const [otherAmounts, setOtherAmounts] = useState({
+  const [otherAmounts, setOtherAmounts] = useState<Record<NonCashMethod, number>>({
     [CashCountMethod.CARD]: 0,
     [CashCountMethod.TRANSFER]: 0,
     [CashCountMethod.QR]: 0,
@@ -99,7 +106,7 @@ export default function CashCountPage() {
     }
   };
 
-  const handleSaveOther = async (method: CashCountMethod) => {
+  const handleSaveOther = async (method: NonCashMethod) => {
     if (!currentShift) return;
 
     try {
@@ -222,22 +229,22 @@ export default function CashCountPage() {
               type="number"
               min="0"
               step="1000"
-              value={otherAmounts[activeMethod]}
+              value={otherAmounts[activeMethod as NonCashMethod]}
               onChange={(e) =>
                 setOtherAmounts({
                   ...otherAmounts,
-                  [activeMethod]: parseInt(e.target.value) || 0,
+                  [activeMethod as NonCashMethod]: parseInt(e.target.value) || 0,
                 })
               }
               className="w-full px-4 py-3 bg-background border border-border rounded-lg text-lg"
             />
             <p className="text-sm text-muted-foreground mt-1">
-              {formatCurrency(otherAmounts[activeMethod])}
+              {formatCurrency(otherAmounts[activeMethod as NonCashMethod])}
             </p>
           </div>
 
           <button
-            onClick={() => handleSaveOther(activeMethod)}
+            onClick={() => handleSaveOther(activeMethod as NonCashMethod)}
             disabled={saving}
             className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50"
           >

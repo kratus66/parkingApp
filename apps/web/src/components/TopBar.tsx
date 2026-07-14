@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Search, Moon, Sun, User, Settings, LogOut } from "lucide-react"
+import { ParkingLotSelector } from "@/components/ParkingLotSelector"
 
 interface TopBarProps {
   isDark: boolean
@@ -64,6 +65,8 @@ export function TopBar({ isDark, onToggleDark }: TopBarProps) {
 
         {/* Right: Search, avatar, dark mode */}
         <div className="flex items-center gap-3">
+          <ParkingLotSelector />
+
           <div className="relative hidden sm:block">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input

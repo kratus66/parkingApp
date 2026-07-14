@@ -58,9 +58,6 @@ export default function ActiveTicketsPage() {
   const [reprintTicketNumber, setReprintTicketNumber] = useState('');
   const [reprintSessionId, setReprintSessionId] = useState('');
 
-  // ID del parqueadero (debería venir del contexto del usuario)
-  const parkingLotId = 'b04f6eec-264b-4143-9b71-814b05d4ffc4';
-
   useEffect(() => {
     loadActiveSessions();
 
@@ -122,7 +119,9 @@ export default function ActiveTicketsPage() {
       const previewData = await checkoutApi.preview(sessionId, false);
       
       // Paso 2: Mostrar los datos al usuario y solicitar información de pago
-      const total = previewData.data?.quote?.total || previewData.quote?.total || 0;
+      // NOTA (Sprint A): manejo defensivo por doble envoltura { data, meta }.
+      const total =
+        (previewData as any).data?.quote?.total || previewData.quote?.total || 0;
       setCheckoutSession({ id: sessionId, ticket: ticketNumber });
       setCheckoutTotal(total);
       setCheckoutMethod(PaymentMethod.CASH);

@@ -1,6 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class Sprint4ParkingSessions1768494495213 implements MigrationInterface {
+export class Sprint4ParkingSessions1705400000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     // 1. Create parking_lot_counters table
     await queryRunner.query(`
@@ -28,7 +28,7 @@ export class Sprint4ParkingSessions1768494495213 implements MigrationInterface {
         company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
         parking_lot_id UUID NOT NULL REFERENCES parking_lots(id) ON DELETE CASCADE,
         customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
-        vehicle_id UUID NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+        vehicle_id UUID NOT NULL REFERENCES vehicles_v2(id) ON DELETE CASCADE,
         spot_id UUID REFERENCES parking_spots(id) ON DELETE SET NULL,
         entry_at TIMESTAMP NOT NULL DEFAULT NOW(),
         exit_at TIMESTAMP,

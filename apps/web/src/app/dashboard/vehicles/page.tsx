@@ -43,7 +43,8 @@ export default function VehiclesPage() {
       console.log('Vehicles API Response:', response);
       
       // Manejar respuesta anidada
-      const actualData = response?.data || response;
+      // NOTA (Sprint A): doble envoltura { data, meta }; manejo defensivo tipado como any.
+      const actualData: any = (response as any)?.data || response;
       const vehiclesData = Array.isArray(actualData?.data) ? actualData.data : (Array.isArray(actualData) ? actualData : []);
       
       setVehicles(vehiclesData);

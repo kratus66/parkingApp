@@ -23,6 +23,7 @@ export interface CreateCustomerDto {
   email?: string;
   address?: string;
   notes?: string;
+  agreementId?: string;
 }
 
 export interface UpdateCustomerDto {

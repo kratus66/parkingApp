@@ -33,7 +33,9 @@ export default function CustomersPage() {
       console.log('API Response:', response);
       
       // La respuesta viene anidada: { data: { data: [], meta: {} }, meta: {} }
-      const actualData = response?.data || response;
+      // NOTA (Sprint A): doble envoltura por TransformInterceptor global + tipos de servicio
+      // desalineados. Manejo defensivo tipado como any hasta unificar el contrato de API.
+      const actualData: any = (response as any)?.data || response;
       
       if (actualData && typeof actualData === 'object' && 'data' in actualData) {
         const customerData = Array.isArray(actualData.data) ? actualData.data : [];

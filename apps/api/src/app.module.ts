@@ -23,6 +23,8 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 // Sprint 5 modules
 import { HolidaysModule } from './modules/holidays/holidays.module';
 import { PricingModule } from './modules/pricing/pricing.module';
+import { AgreementsModule } from './modules/agreements/agreements.module';
+import { BillingModule } from './modules/billing/billing.module';
 // Sprint 6 modules
 import { CheckoutModule } from './modules/checkout/checkout.module';
 import { PaymentsModule } from './modules/payments/payments.module';
@@ -59,6 +61,8 @@ import { HealthController } from './health.controller';
     NotificationsModule,
     // Sprint 5
     HolidaysModule,
+    AgreementsModule,
+    BillingModule,
     PricingModule,
     // Sprint 6
     CheckoutModule,

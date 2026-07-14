@@ -43,7 +43,9 @@ export const occupancyService = {
     console.log('🔵 [occupancyService.getAvailableSpots] Params:', { parkingLotId, vehicleType });
     
     try {
-      const result = await api.get(url);
+      // NOTA (Sprint A): el interceptor de axios desenvuelve a body en runtime pero el tipo
+      // sigue siendo AxiosResponse; tipamos como any hasta unificar el contrato de API.
+      const result: any = await api.get(url);
       console.log('✅ [occupancyService.getAvailableSpots] Respuesta recibida:', result);
       console.log('✅ [occupancyService.getAvailableSpots] Tipo de respuesta:', typeof result, Array.isArray(result));
       console.log('✅ [occupancyService.getAvailableSpots] Primer elemento:', result[0]);

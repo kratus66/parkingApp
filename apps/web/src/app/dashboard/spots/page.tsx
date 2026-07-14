@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { spotService, ParkingSpot } from '@/services/spotService';
+import { useActiveParkingLotId } from '@/lib/parkingContext';
 import { zoneService, ParkingZone } from '@/services/zoneService';
 import { Plus, Search } from 'lucide-react';
 
@@ -12,7 +13,7 @@ export default function SpotsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  const parkingLotId = 'b04f6eec-264b-4143-9b71-814b05d4ffc4';
+  const parkingLotId = useActiveParkingLotId();
 
   // Filtros
   const [filters, setFilters] = useState({
@@ -38,6 +39,7 @@ export default function SpotsPage() {
   };
 
   const loadData = async () => {
+    if (!parkingLotId) return;
     try {
       setLoading(true);
       setError(null);
@@ -65,7 +67,8 @@ export default function SpotsPage() {
 
   useEffect(() => {
     loadData();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parkingLotId]);
 
   useEffect(() => {
     setSpots(applyFilters(allSpots));

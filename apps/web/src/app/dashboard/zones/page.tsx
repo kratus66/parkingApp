@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { zoneService, ParkingZone, CreateZoneDto } from '@/services/zoneService';
+import { useActiveParkingLotId } from '@/lib/parkingContext';
 import { Plus, Edit, Trash2, X } from 'lucide-react';
 
 export default function ZonesPage() {
@@ -11,7 +12,7 @@ export default function ZonesPage() {
   const [editingZone, setEditingZone] = useState<ParkingZone | null>(null);
   const [error, setError] = useState<string | null>(null);
   
-  const parkingLotId = 'b04f6eec-264b-4143-9b71-814b05d4ffc4';
+  const parkingLotId = useActiveParkingLotId();
 
   const [formData, setFormData] = useState({
     name: '',
@@ -27,6 +28,7 @@ export default function ZonesPage() {
   ];
 
   const loadZones = async () => {
+    if (!parkingLotId) return;
     try {
       setLoading(true);
       setError(null);
@@ -50,7 +52,8 @@ export default function ZonesPage() {
 
   useEffect(() => {
     loadZones();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parkingLotId]);
 
   const handleOpenModal = (zone?: ParkingZone) => {
     if (zone) {

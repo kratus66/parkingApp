@@ -13,16 +13,21 @@ export const checkoutApi = {
   /**
    * Preview de checkout
    */
-  async preview(sessionId: string, lostTicket = false): Promise<CheckoutPreview> {
+  async preview(
+    sessionId: string,
+    lostTicket = false,
+    agreementId?: string,
+  ): Promise<CheckoutPreview> {
     const token = localStorage.getItem('token');
     const response = await axios.post(
       `${API_URL}/checkout/preview`,
-      { sessionId, lostTicket },
+      { sessionId, lostTicket, ...(agreementId ? { agreementId } : {}) },
       {
         headers: { Authorization: `Bearer ${token}` },
       },
     );
-    return response.data;
+    // El backend envuelve la respuesta en { data, meta }
+    return response.data?.data ?? response.data;
   },
 
   /**
@@ -32,16 +37,17 @@ export const checkoutApi = {
     sessionId: string,
     paymentItems: PaymentItem[],
     lostTicket = false,
+    agreementId?: string,
   ): Promise<CheckoutConfirmResponse> {
     const token = localStorage.getItem('token');
     const response = await axios.post(
       `${API_URL}/checkout/confirm`,
-      { sessionId, paymentItems, lostTicket },
+      { sessionId, paymentItems, lostTicket, ...(agreementId ? { agreementId } : {}) },
       {
         headers: { Authorization: `Bearer ${token}` },
       },
     );
-    return response.data;
+    return response.data?.data ?? response.data;
   },
 
   /**

@@ -13,6 +13,7 @@ import {
 import { Company } from '../modules/companies/entities/company.entity';
 import { Vehicle } from './vehicle-v2.entity';
 import { Consent } from './consent.entity';
+import { Agreement } from './agreement.entity';
 
 export enum DocumentType {
   CC = 'CC',
@@ -66,6 +67,14 @@ export class Customer {
 
   @Column({ type: 'boolean', default: true, name: 'is_active' })
   isActive: boolean;
+
+  /** Convenio al que pertenece el cliente (opcional). El descuento se aplica en el checkout. */
+  @Column({ type: 'uuid', name: 'agreement_id', nullable: true })
+  agreementId: string | null;
+
+  @ManyToOne(() => Agreement, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'agreement_id' })
+  agreement: Agreement | null;
 
   @OneToMany(() => Vehicle, (vehicle) => vehicle.customer)
   vehicles: Vehicle[];

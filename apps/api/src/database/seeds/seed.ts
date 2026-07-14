@@ -68,6 +68,64 @@ async function seed() {
     const parkingLotId = parkingLotResult[0].id;
     console.log(`✅ Parking lot created: ${parkingLotId}`);
 
+    // Create demo zones and spots (todos FREE, deterministas) para que el
+    // parqueadero sea operable de inmediato en la UI.
+    const zonesSeed: {
+      name: string;
+      description: string;
+      types: string;
+      prefix: string;
+      count: number;
+    }[] = [
+      { name: 'Zona A - Autos', description: 'Automóviles', types: 'CAR', prefix: 'A', count: 20 },
+      { name: 'Zona B - Motos', description: 'Motocicletas', types: 'MOTORCYCLE', prefix: 'B', count: 15 },
+      { name: 'Zona C - Camiones/Buses', description: 'Vehículos grandes', types: 'TRUCK_BUS', prefix: 'C', count: 5 },
+      { name: 'Zona D - Bicicletas', description: 'Bicicletas', types: 'BICYCLE', prefix: 'D', count: 10 },
+    ];
+
+    let totalSpots = 0;
+    for (const z of zonesSeed) {
+      const zoneRes = await queryRunner.query(
+        `
+        INSERT INTO parking_zones (company_id, parking_lot_id, name, description, allowed_vehicle_types, is_active)
+        VALUES ($1, $2, $3, $4, $5::vehicle_type_enum[], true)
+        RETURNING id
+      `,
+        [companyId, parkingLotId, z.name, z.description, `{${z.types}}`],
+      );
+      const zoneId = zoneRes[0].id;
+
+      for (let i = 1; i <= z.count; i++) {
+        const code = `${z.prefix}-${i.toString().padStart(2, '0')}`;
+        const priority = i <= 5 ? 10 : i <= 10 ? 5 : 0;
+        await queryRunner.query(
+          `
+          INSERT INTO parking_spots (company_id, parking_lot_id, zone_id, code, spot_type, status, priority)
+          VALUES ($1, $2, $3, $4, $5::vehicle_type_enum, 'FREE'::spot_status_enum, $6)
+        `,
+          [companyId, parkingLotId, zoneId, code, z.types, priority],
+        );
+        totalSpots++;
+      }
+      console.log(`✅ Zona creada: ${z.name} (${z.count} puestos)`);
+    }
+    console.log(`✅ ${zonesSeed.length} zonas y ${totalSpots} puestos creados (todos FREE)`);
+
+    // Resolución de facturación DIAN (demo, ambiente de pruebas)
+    await queryRunner.query(
+      `
+      INSERT INTO billing_resolutions
+        (company_id, parking_lot_id, document_type, prefix, resolution_number,
+         range_from, range_to, current_number, valid_from, valid_until,
+         technical_key, environment, is_active)
+      VALUES ($1, $2, 'FACTURA_VENTA', 'FE', '18764003812345',
+              1000, 5000, 999, '2026-01-01', '2027-01-01',
+              'fc8eac422eba16e22ffd8c6f94b3f40a6e38162c', 2, true)
+    `,
+      [companyId, parkingLotId],
+    );
+    console.log('✅ Resolución de facturación DIAN (demo) creada: prefijo FE, rango 1000-5000');
+
     // Hash password
     const passwordHash = await bcrypt.hash('Admin123*', 10);
     const supervisorPasswordHash = await bcrypt.hash('Super123*', 10);

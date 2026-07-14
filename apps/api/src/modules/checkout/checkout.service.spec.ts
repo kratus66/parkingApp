@@ -1,13 +1,32 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { CheckoutService } from './checkout.service';
-import { Repository } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ParkingSession } from '../../entities/parking-session.entity';
+import { ParkingSpot } from '../../entities/parking-spot.entity';
 import { Payment } from '../../entities/payment.entity';
+import { PaymentItem, PaymentMethod } from '../../entities/payment-item.entity';
 import { CustomerInvoice } from '../../entities/customer-invoice.entity';
+import { CustomerInvoiceItem } from '../../entities/customer-invoice-item.entity';
 import { PricingSnapshot } from '../../entities/pricing-snapshot.entity';
 import { InvoiceCounter } from '../../entities/invoice-counter.entity';
-import { PaymentMethod } from '../../entities/payment-item.entity';
+import { CashShift } from '../../entities/cash-shift.entity';
+import { CashPolicy } from '../../entities/cash-policy.entity';
+import { AuditLog } from '../audit/entities/audit-log.entity';
+import { PricingService } from '../pricing/pricing.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { AgreementsService } from '../agreements/agreements.service';
+import { BillingService } from '../billing/billing.service';
+import { FiscalService } from '../billing/fiscal.service';
+import { InvoiceService } from './invoice.service';
+
+// Mock genérico de repositorio TypeORM
+const mockRepositoryFactory = () => ({
+  find: jest.fn(),
+  findOne: jest.fn(),
+  save: jest.fn(),
+  create: jest.fn(),
+});
 
 describe('CheckoutService', () => {
   let service: CheckoutService;
@@ -49,57 +68,82 @@ describe('CheckoutService', () => {
         CheckoutService,
         {
           provide: getRepositoryToken(ParkingSession),
-          useValue: {
-            findOne: jest.fn(),
-          },
+          useFactory: mockRepositoryFactory,
+        },
+        {
+          provide: getRepositoryToken(ParkingSpot),
+          useFactory: mockRepositoryFactory,
         },
         {
           provide: getRepositoryToken(Payment),
-          useValue: {
-            findOne: jest.fn(),
-          },
+          useFactory: mockRepositoryFactory,
+        },
+        {
+          provide: getRepositoryToken(PaymentItem),
+          useFactory: mockRepositoryFactory,
         },
         {
           provide: getRepositoryToken(CustomerInvoice),
-          useValue: {
-            findOne: jest.fn(),
-          },
+          useFactory: mockRepositoryFactory,
+        },
+        {
+          provide: getRepositoryToken(CustomerInvoiceItem),
+          useFactory: mockRepositoryFactory,
         },
         {
           provide: getRepositoryToken(PricingSnapshot),
-          useValue: {},
+          useFactory: mockRepositoryFactory,
         },
         {
           provide: getRepositoryToken(InvoiceCounter),
-          useValue: {},
+          useFactory: mockRepositoryFactory,
         },
         {
-          provide: 'PricingService',
+          provide: getRepositoryToken(AuditLog),
+          useFactory: mockRepositoryFactory,
+        },
+        {
+          provide: getRepositoryToken(CashShift),
+          useFactory: mockRepositoryFactory,
+        },
+        {
+          provide: getRepositoryToken(CashPolicy),
+          useFactory: mockRepositoryFactory,
+        },
+        {
+          provide: PricingService,
           useValue: {
             calculateQuote: jest.fn().mockResolvedValue(mockQuote),
           },
         },
         {
-          provide: 'NotificationsService',
+          provide: NotificationsService,
           useValue: {
             sendNotification: jest.fn(),
           },
         },
         {
-          provide: 'OccupancyGateway',
+          provide: AgreementsService,
           useValue: {
-            emitSpotUpdated: jest.fn(),
-            emitOccupancyUpdated: jest.fn(),
+            resolve: jest.fn().mockResolvedValue(null),
+            computeDiscount: jest.fn().mockReturnValue(0),
           },
         },
         {
-          provide: 'InvoiceService',
+          provide: BillingService,
+          useValue: {
+            nextNumber: jest.fn().mockResolvedValue(null),
+          },
+        },
+        FiscalService,
+        {
+          provide: InvoiceService,
           useValue: {
             generateInvoiceHtml: jest.fn().mockResolvedValue('<html></html>'),
           },
         },
         {
-          provide: 'DataSource',
+          provide: DataSource,
           useValue: {
             transaction: jest.fn(),
           },

@@ -68,6 +68,14 @@ export class CheckoutPreviewDto {
   @IsBoolean()
   @IsOptional()
   lostTicket?: boolean;
+
+  @ApiProperty({
+    description: 'Convenio a aplicar (opcional). Si se omite, se usa el del cliente.',
+    required: false,
+  })
+  @IsUUID()
+  @IsOptional()
+  agreementId?: string;
 }
 
 export class CheckoutConfirmDto {
@@ -96,6 +104,14 @@ export class CheckoutConfirmDto {
   @ValidateNested({ each: true })
   @Type(() => PaymentItemDto)
   paymentItems: PaymentItemDto[];
+
+  @ApiProperty({
+    description: 'Convenio a aplicar (opcional). Si se omite, se usa el del cliente.',
+    required: false,
+  })
+  @IsUUID()
+  @IsOptional()
+  agreementId?: string;
 }
 
 export class VoidReasonDto {

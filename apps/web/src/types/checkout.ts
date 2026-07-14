@@ -68,6 +68,11 @@ export interface CustomerInvoice {
   subtotal: number;
   discounts: number;
   total: number;
+  taxableBase?: number;
+  taxRate?: number;
+  taxAmount?: number;
+  cufe?: string | null;
+  resolutionNumber?: string | null;
   currency: string;
   status: InvoiceStatus;
   voidedByUserId?: string;
@@ -80,6 +85,13 @@ export interface CustomerInvoice {
   voidedBy?: any;
 }
 
+export interface AgreementSummary {
+  id: string;
+  name: string;
+  discountType: 'PERCENT' | 'FIXED';
+  discountValue: number;
+}
+
 export interface CheckoutPreview {
   sessionId: string;
   ticketNumber: string;
@@ -88,6 +100,12 @@ export interface CheckoutPreview {
   totalMinutes: number;
   vehicleType: string;
   quote: any;
+  subtotal?: number;
+  discount?: number;
+  taxableBase?: number;
+  taxRate?: number;
+  taxAmount?: number;
+  agreement?: AgreementSummary | null;
   total: number;
   customer?: any;
   vehicle?: any;

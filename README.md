@@ -1,33 +1,50 @@
 # Sistema de Gestión de Parqueaderos 🚗
 
-Sistema SaaS multi-empresa para la gestión integral de parqueaderos, construido con **NestJS**, **Next.js**, **PostgreSQL** y **TypeScript**.
+Sistema SaaS multi-empresa para la gestión integral de parqueaderos, construido con **NestJS**,
+**Next.js**, **PostgreSQL** y **TypeScript**.
 
-## 📋 Tabla de Contenidos
+## 📚 Documentación
 
-- [Características](#características)
-- [Requisitos Previos](#requisitos-previos)
-- [Estructura del Proyecto](#estructura-del-proyecto)
-- [Instalación](#instalación)
-- [Configuración](#configuración)
-- [Ejecutar el Proyecto](#ejecutar-el-proyecto)
-- [Arquitectura](#arquitectura)
-- [Sprints y Roadmap](#sprints-y-roadmap)
-- [Tecnologías](#tecnologías)
+| Documento | Contenido |
+|---|---|
+| **[docs/BUSINESS_LOGIC.md](docs/BUSINESS_LOGIC.md)** | **Lógica de negocio de punta a punta** (flujos, tarifas, caja, invariantes, hallazgos). Documento canónico. |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Arquitectura técnica: módulos, entidades, seguridad, variables de entorno |
+| [QUICKSTART.md](QUICKSTART.md) | Puesta en marcha paso a paso |
+| `SPRINT*.md`, `INFORME_*.md`, etc. (raíz) | **Históricos por sprint** — útiles como bitácora, pueden estar desactualizados; ante conflicto manda BUSINESS_LOGIC.md |
 
-## ✨ Características
+## ✨ Qué hace hoy
 
-- ✅ **Multi-empresa / Multi-parqueadero**: Soporte para múltiples empresas y parqueaderos
-- ✅ **Autenticación JWT**: Sistema de autenticación seguro con roles (Admin, Supervisor, Cajero)
-- ✅ **Auditoría completa**: Registro automático de todas las operaciones críticas
-- ✅ **API REST documentada**: Documentación Swagger automática
-- ✅ **TypeScript 100%**: Type-safety en frontend y backend
-- ✅ **Base de datos PostgreSQL**: Con migraciones y seeds
-- ✅ **Docker**: Entorno de desarrollo containerizado
-- ✅ **Linting y formateo**: ESLint + Prettier configurados
+- ✅ **Multi-empresa / multi-parqueadero** con aislamiento por empresa (JWT) y selector de
+  parqueadero activo en la UI
+- ✅ **Roles** ADMIN / SUPERVISOR / CAJERO con permisos por endpoint
+- ✅ **Registro de clientes y vehículos** (documento y placa únicos por empresa,
+  bicicletas por código)
+- ✅ **Check-in** con asignación de puesto (automática o manual), ticket térmico consecutivo
+  por parqueadero, reimpresión con motivo y cancelación supervisada
+- ✅ **Motor de tarifas** configurable: reglas por tipo de vehículo × día
+  (hábil/fin de semana/festivo) × periodo (día/noche), unidades minuto/bloques/hora/día,
+  redondeo, cargo mínimo, gracia, tope diario y simulador
+- ✅ **Checkout** con preview, pago multi-método (efectivo con cambio, tarjeta,
+  transferencia, QR), convenios de descuento y snapshot del cálculo
+- ✅ **Facturación formal (DIAN-ready)**: desglose de **IVA 19%** (precio incluido),
+  **numeración por resolución** DIAN (prefijo + rango consecutivo con bloqueo),
+  **CUFE** (algoritmo SHA-384) y factura imprimible con datos legales, descuento, IVA,
+  CUFE y **QR**. *(No incluye transmisión/firma electrónica real — requiere proveedor DIAN.)*
+- ✅ **Caja por turnos**: base inicial, movimientos ingreso/egreso, arqueo por
+  denominaciones, cierre con esperado vs. contado y diferencia
+- ✅ **Anulación** de pagos y facturas (supervisor/admin, con motivo, auditada)
+- ✅ **Ocupación** por zonas/puestos con dashboard de KPIs y alertas de capacidad
+- ✅ **Consentimientos** WhatsApp/Email por cliente (historial auditable)
+- ✅ **Auditoría completa** de operaciones críticas
+- ✅ **API REST documentada** con Swagger (`/docs`)
+
+> ⚠️ **Módulos legacy**: `/vehicles` (v1) y `/tickets`, más el endpoint
+> `POST /parking-sessions/:id/check-out`, son de generaciones anteriores y **no** deben
+> usarse (tarifas fijas en código, sin factura ni caja). El flujo vigente es
+> `vehicles-v2` + `parking-sessions/check-in` + `checkout`. Detalle en
+> [BUSINESS_LOGIC.md §9](docs/BUSINESS_LOGIC.md#9-módulos-legacy-y-rutas-duplicadas).
 
 ## 🔧 Requisitos Previos
-
-Antes de empezar, asegúrate de tener instalado:
 
 - **Node.js** v18+ y **npm** v9+
 - **Docker** y **Docker Compose**
@@ -36,295 +53,112 @@ Antes de empezar, asegúrate de tener instalado:
 ## 📁 Estructura del Proyecto
 
 ```
-parking-system/
+parkingApp/
 ├── apps/
 │   ├── api/              # Backend NestJS
-│   │   ├── src/
-│   │   │   ├── modules/  # Módulos de negocio
-│   │   │   ├── common/   # Guards, decorators, filters, etc.
-│   │   │   ├── database/ # Configuración DB, migraciones, seeds
-│   │   │   └── main.ts
-│   │   └── package.json
-│   └── web/              # Frontend Next.js
-│       ├── src/
-│       │   ├── app/      # App Router de Next.js
-│       │   ├── components/
-│       │   ├── lib/      # Utilidades (API client)
-│       │   └── types/
-│       └── package.json
-├── infra/
-│   ├── docker-compose.yml
-│   └── db/
-├── docs/
-│   ├── ARCHITECTURE.md
-│   └── SPRINTS.md
-├── package.json          # Workspace raíz
-└── README.md
+│   │   └── src/
+│   │       ├── modules/  # 22 módulos de negocio (ver docs/ARCHITECTURE.md)
+│   │       ├── entities/ # Entidades TypeORM compartidas
+│   │       ├── common/   # Guards, decorators, filters, interceptors
+│   │       ├── database/ # Data source, migraciones, seeds
+│   │       └── main.ts
+│   └── web/              # Frontend Next.js (App Router)
+│       └── src/
+│           ├── app/      # /login, /dashboard, /ops, /cash
+│           ├── components/
+│           ├── services/ # Clientes de API por dominio
+│           └── lib/      # api.ts (axios), contexto de parqueadero
+├── infra/docker-compose.yml   # PostgreSQL 15 + pgAdmin
+├── docs/                      # BUSINESS_LOGIC.md, ARCHITECTURE.md
+└── package.json               # Workspace raíz
 ```
 
-## 🚀 Instalación
+## 🚀 Instalación y arranque
 
-### 1. Clonar el repositorio (si aplica)
-
-```bash
-git clone <tu-repositorio>
-cd parking-system
-```
-
-### 2. Instalar dependencias
+> Guía detallada en [QUICKSTART.md](QUICKSTART.md). Resumen:
 
 ```bash
-# Instalar dependencias del workspace raíz
-npm install
+npm install                                   # raíz (workspaces)
 
-# Instalar dependencias del backend
+# 1. Base de datos (Postgres en host 5433, pgAdmin en 5051)
+docker compose -f infra/docker-compose.yml up -d
+
+# 2. Backend
 cd apps/api
-npm install
-
-# Instalar dependencias del frontend
-cd ../web
-npm install
-
-# Volver a la raíz
-cd ../..
-```
-
-## ⚙️ Configuración
-
-### Backend (API)
-
-Copia el archivo de ejemplo y configura las variables de entorno:
-
-```bash
-cd apps/api
-cp .env.example .env
-```
-
-Edita `apps/api/.env`:
-
-```env
-NODE_ENV=development
-PORT=3001
-API_PREFIX=api/v1
-
-# Database
-DB_HOST=localhost
-DB_PORT=5432
-DB_USERNAME=parking_user
-DB_PASSWORD=parking_pass_2026
-DB_DATABASE=parking_system
-
-# JWT
-JWT_SECRET=your-super-secret-jwt-key-change-this-in-production-2026
-JWT_EXPIRATION=7d
-
-# CORS
-CORS_ORIGIN=http://localhost:3000
-```
-
-### Frontend (Web)
-
-```bash
-cd apps/web
-cp .env.example .env.local
-```
-
-Edita `apps/web/.env.local`:
-
-```env
-NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1
-```
-
-## 🏃 Ejecutar el Proyecto
-
-### Paso 1: Levantar la base de datos con Docker
-
-Desde la raíz del proyecto:
-
-```bash
-# Iniciar PostgreSQL y pgAdmin
-npm run docker:up
-
-# Ver logs
-npm run docker:logs
-
-# Detener contenedores
-npm run docker:down
-```
-
-**Accesos:**
-- **PostgreSQL**: `localhost:5432`
-- **pgAdmin**: `http://localhost:5050`
-  - Email: `admin@parking.com`
-  - Password: `admin123`
-
-### Paso 2: Ejecutar migraciones
-
-```bash
-cd apps/api
-
-# Ejecutar migraciones (crear tablas)
+cp .env.example .env                          # ajusta DB_PORT=5433
 npm run migration:run
-```
-
-### Paso 3: Ejecutar seeds (datos demo)
-
-```bash
 npm run seed
+npm run start:dev                             # http://localhost:3001/api/v1 — Swagger en /docs
+
+# 3. Frontend (en otra terminal)
+cd apps/web
+cp .env.example .env.local                    # NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1
+npx next dev -p 3003                          # http://localhost:3003
 ```
 
-**Credenciales demo creadas:**
+### ⚠️ Puertos (importante)
+
+| Servicio | Puerto | Nota |
+|---|---|---|
+| API | **3001** | `PORT` en `apps/api/.env` |
+| Web | **3003** (o 3000/3005) | El CORS del backend está **hardcodeado** en `main.ts` a 3000/3003/3005 — la variable `CORS_ORIGIN` se ignora. Otros puertos fallarán por CORS. |
+| PostgreSQL | **5433** (host) | Mapeado en `infra/docker-compose.yml`; por eso `DB_PORT=5433` |
+| pgAdmin | **5051** | `admin@parking.com` / `admin123` |
+
+**Credenciales demo** (tras `npm run seed`):
+
 - **Admin**: `admin@demo.com` / `Admin123*`
 - **Supervisor**: `supervisor@demo.com` / `Super123*`
 - **Cajero**: `cajero@demo.com` / `Cajero123*`
 
-### Paso 4: Iniciar el backend
+El seed crea además: 1 empresa, el parqueadero "Parqueadero Centro" con 4 zonas y 50 puestos,
+2 clientes con vehículos, el plan tarifario "Tarifa Base 2026" (24 reglas) y los festivos de
+Colombia 2026.
 
-```bash
-# Desde apps/api o desde la raíz
-npm run api:dev
-```
+## 🧪 Probar el flujo completo
 
-El servidor iniciará en: `http://localhost:3001/api/v1`
-
-**Swagger docs**: `http://localhost:3001/docs`
-
-### Paso 5: Iniciar el frontend
-
-En otra terminal:
-
-```bash
-# Desde apps/web o desde la raíz
-npm run web:dev
-```
-
-La aplicación web estará en: `http://localhost:3000`
-
-## 🧪 Probar la aplicación
-
-1. Abre `http://localhost:3000`
-2. Ve a `/login`
-3. Usa las credenciales demo: `admin@demo.com` / `Admin123*`
-4. Explora el dashboard
-
-## 📚 Arquitectura
-
-Ver [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) para detalles completos sobre:
-- Módulos backend
-- Entidades y relaciones
-- Sistema de autenticación y roles
-- Sistema de auditoría
-- Flujo de datos
-
-## 🗺️ Sprints y Roadmap
-
-Ver [docs/SPRINTS.md](docs/SPRINTS.md) para la planificación detallada de los siguientes sprints:
-
-1. ✅ **Sprint 0**: Infraestructura base (completado)
-2. 🔜 **Sprint 1**: Gestión de vehículos y tickets
-3. 🔜 **Sprint 2**: Tarifas y facturación
-4. 🔜 **Sprint 3**: Reportes y estadísticas
-5. ... (10 sprints planificados)
+1. Entra a `http://localhost:3003/login` con `cajero@demo.com`.
+2. **Caja → Abrir turno** (la política por defecto lo exige para operar).
+3. **Dashboard → Registrar entrada**: placa nueva → crea cliente + vehículo → ticket.
+4. **Operaciones → Checkout**: busca la sesión, revisa el preview (motor de tarifas),
+   cobra en efectivo y obtén la factura imprimible.
+5. **Caja → Arqueo y cierre**: cuenta el efectivo y cierra el turno (diferencia esperado vs.
+   contado).
 
 ## 🛠️ Tecnologías
 
-### Backend
-- **NestJS** v10 - Framework Node.js
-- **TypeORM** - ORM para PostgreSQL
-- **PostgreSQL** v16 - Base de datos
-- **Passport JWT** - Autenticación
-- **Swagger** - Documentación API
-- **Bcrypt** - Hashing de contraseñas
-- **Class-validator** - Validación de DTOs
-
-### Frontend
-- **Next.js** v14 - Framework React
-- **React** v18 - UI Library
-- **TypeScript** - Type safety
-- **TailwindCSS** - Estilos
-- **Axios** - HTTP client
-- **React Hook Form** + **Zod** - Validación de formularios
-- **TanStack Query** - Data fetching
-
-### Infraestructura
-- **Docker** - Containerización
-- **PostgreSQL** - Base de datos
-- **pgAdmin** - Administración DB
+**Backend**: NestJS 10 · TypeORM · PostgreSQL 15 · Passport JWT · Swagger · Bcrypt ·
+class-validator
+**Frontend**: Next.js 14 · React 18 · TypeScript · TailwindCSS · Axios · React Hook Form +
+Zod · TanStack Query
+**Infra**: Docker Compose (PostgreSQL + pgAdmin) · husky + lint-staged
 
 ## 📝 Scripts útiles
 
-### Raíz del proyecto
-
+### Raíz
 ```bash
-npm run api:dev           # Iniciar backend en desarrollo
-npm run api:build         # Compilar backend
-npm run api:start         # Iniciar backend en producción
-
-npm run web:dev           # Iniciar frontend en desarrollo
-npm run web:build         # Compilar frontend
-npm run web:start         # Iniciar frontend en producción
-
-npm run docker:up         # Levantar Docker Compose
-npm run docker:down       # Detener Docker Compose
-npm run docker:logs       # Ver logs de Docker
-
-npm run lint              # Ejecutar linters
-npm run format            # Formatear código
+npm run api:dev / api:build       # backend
+npm run web:dev / web:build       # frontend (web:dev usa el puerto 3000 por defecto)
+npm run docker:up / docker:down   # base de datos
+npm run lint / format
 ```
 
-### Backend (apps/api)
-
+### Backend (`apps/api`)
 ```bash
-npm run start:dev         # Desarrollo con hot-reload
-npm run build             # Compilar
-npm run start:prod        # Producción
-
-npm run migration:generate  # Generar migración
-npm run migration:run       # Ejecutar migraciones
-npm run migration:revert    # Revertir última migración
-npm run seed                # Ejecutar seeds
-
-npm run lint              # ESLint
-npm run format            # Prettier
-npm run test              # Tests unitarios
-npm run test:e2e          # Tests e2e
-```
-
-### Frontend (apps/web)
-
-```bash
-npm run dev               # Desarrollo
-npm run build             # Compilar
-npm run start             # Producción
-npm run lint              # ESLint
-npm run format            # Prettier
+npm run start:dev                 # hot-reload
+npm run migration:run / migration:revert
+npm run seed
+npm run test                      # unit tests (motor de tarifas, turnos)
 ```
 
 ## 🔐 Seguridad
 
-- Las contraseñas se hashean con bcrypt (10 rounds)
-- JWT con expiración configurable
-- CORS configurado
-- Helmet para headers de seguridad
-- Validación de entrada con class-validator
-- Guards de autenticación y roles
-
-## 🤝 Contribuir
-
-1. Crea un branch para tu feature
-2. Haz commits con mensajes descriptivos
-3. Asegúrate de que pasen los linters
-4. Crea un Pull Request
+- Contraseñas con bcrypt (10 rounds); JWT con expiración configurable
+- Guards de autenticación y roles por endpoint + scoping por empresa
+- Helmet y validación global de DTOs (whitelist)
+- Limitaciones conocidas (ver [BUSINESS_LOGIC.md §10](docs/BUSINESS_LOGIC.md#10-hallazgos-y-decisiones-abiertas)):
+  token en localStorage sin refresh, CORS hardcodeado, y 3 endpoints sin scoping por empresa
 
 ## 📄 Licencia
 
 MIT
-
----
-
-**¡Listo para empezar a construir! 🚀**
-
-Para más información, consulta:
-- [Arquitectura](docs/ARCHITECTURE.md)
-- [Sprints](docs/SPRINTS.md)
-- [Swagger API](http://localhost:3001/docs) (cuando el backend esté corriendo)

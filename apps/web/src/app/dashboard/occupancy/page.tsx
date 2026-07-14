@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { occupancyService, OccupancySummary } from '@/services/occupancyService';
+import { useActiveParkingLotId } from '@/lib/parkingContext';
 import { Car, Bike, Truck, AlertTriangle, CheckCircle, Clock, XCircle } from 'lucide-react';
 
 export default function OccupancyPage() {
@@ -9,10 +10,10 @@ export default function OccupancyPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // TODO: Obtener del contexto del usuario
-  const parkingLotId = 'b04f6eec-264b-4143-9b71-814b05d4ffc4';
+  const parkingLotId = useActiveParkingLotId();
 
   const loadData = async () => {
+    if (!parkingLotId) return;
     try {
       setLoading(true);
       setError(null);
@@ -26,12 +27,14 @@ export default function OccupancyPage() {
   };
 
   useEffect(() => {
+    if (!parkingLotId) return;
     loadData();
-    
+
     // Actualizar cada 30 segundos
     const interval = setInterval(loadData, 30000);
     return () => clearInterval(interval);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parkingLotId]);
 
   const getOccupancyPercentage = () => {
     if (!summary) return 0;

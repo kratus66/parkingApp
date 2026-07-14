@@ -6,6 +6,7 @@ import { CustomerInvoiceItem } from '../../entities/customer-invoice-item.entity
 import { AuditLog } from '../audit/entities/audit-log.entity';
 import { AuditAction } from '../audit/enums/audit-action.enum';
 import { ParkingLot } from '../parking-lots/entities/parking-lot.entity';
+import * as QRCode from 'qrcode';
 
 @Injectable()
 export class InvoiceService {
@@ -53,7 +54,7 @@ export class InvoiceService {
 
     if (filters.search) {
       query.andWhere(
-        '(invoice.invoiceNumber ILIKE :search OR customer.fullName ILIKE :search OR customer.documentNumber ILIKE :search OR vehicle.licensePlate ILIKE :search OR vehicle.bikeCode ILIKE :search)',
+        '(invoice.invoiceNumber ILIKE :search OR customer.fullName ILIKE :search OR customer.documentNumber ILIKE :search OR vehicle.plate ILIKE :search OR vehicle.bicycleCode ILIKE :search)',
         { search: `%${filters.search}%` },
       );
     }
@@ -124,9 +125,9 @@ export class InvoiceService {
       // AuditLog
       await manager.save(AuditLog, {
         companyId,
-        userId,
+        actorUserId: userId,
         action: AuditAction.INVOICE_VOIDED,
-        entityType: 'CustomerInvoice',
+        entityName: 'CustomerInvoice',
         entityId: invoice.id,
         before,
         after: invoice,
@@ -167,6 +168,22 @@ export class InvoiceService {
 
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
+
+    const cop = (n: number) => `$${(n ?? 0).toLocaleString('es-CO')}`;
+
+    // QR con la información fiscal (CUFE) para verificación
+    let qrDataUri = '';
+    try {
+      const qrPayload = invoice.cufe
+        ? `NumFac:${invoice.invoiceNumber}\nCUFE:${invoice.cufe}\nValTot:${invoice.total}`
+        : `Factura:${invoice.invoiceNumber}\nTotal:${invoice.total}`;
+      qrDataUri = await QRCode.toDataURL(qrPayload, { margin: 1, width: 140 });
+    } catch {
+      qrDataUri = '';
+    }
+
+    const docTitle =
+      invoice.taxAmount > 0 ? 'FACTURA ELECTRÓNICA DE VENTA' : 'DOCUMENTO EQUIVALENTE';
 
     const html = `
 <!DOCTYPE html>
@@ -258,8 +275,10 @@ export class InvoiceService {
     <p><strong>NIT:</strong> ${parkingLot.legalNit || 'N/A'}</p>
     <p>${parkingLot.address || ''}</p>
     <p><strong>Teléfono:</strong> ${parkingLot.ticketHeader?.phone || 'N/A'}</p>
-    <p style="margin-top: 15px; font-size: 18px;"><strong>FACTURA ${invoice.invoiceNumber}</strong></p>
+    <p style="margin-top: 12px; font-size: 16px; letter-spacing: 1px;"><strong>${docTitle}</strong></p>
+    <p style="font-size: 18px;"><strong>No. ${invoice.invoiceNumber}</strong></p>
     <p>${new Date(invoice.issuedAt).toLocaleString('es-CO', { dateStyle: 'full', timeStyle: 'short' })}</p>
+    ${invoice.resolutionNumber ? `<p style="font-size: 11px; color:#888;">Resolución DIAN ${invoice.resolutionNumber}</p>` : ''}
   </div>
 
   ${invoice.status === InvoiceStatus.VOIDED ? '<div class="status-void">*** FACTURA ANULADA ***</div>' : ''}
@@ -320,25 +339,45 @@ export class InvoiceService {
 
   <div class="totals">
     <div class="row">
-      <span>Subtotal:</span>
-      <span>$${invoice.subtotal.toLocaleString('es-CO')} COP</span>
+      <span>Subtotal (servicio):</span>
+      <span>${cop(invoice.subtotal)} COP</span>
     </div>
     ${invoice.discounts > 0 ? `
-    <div class="row">
-      <span>Descuentos:</span>
-      <span>- $${invoice.discounts.toLocaleString('es-CO')} COP</span>
+    <div class="row" style="color:#0a7a3f;">
+      <span>Descuento:</span>
+      <span>- ${cop(invoice.discounts)} COP</span>
     </div>
     ` : ''}
-    <div class="row total">
-      <span>TOTAL:</span>
-      <span>$${invoice.total.toLocaleString('es-CO')} COP</span>
+    <div class="row">
+      <span>Base gravable:</span>
+      <span>${cop(invoice.taxableBase)} COP</span>
     </div>
+    <div class="row">
+      <span>IVA (${invoice.taxRate}%):</span>
+      <span>${cop(invoice.taxAmount)} COP</span>
+    </div>
+    <div class="row total">
+      <span>TOTAL A PAGAR:</span>
+      <span>${cop(invoice.total)} COP</span>
+    </div>
+    <p style="font-size:11px;color:#888;margin-top:8px;">Valores expresados en pesos colombianos. IVA incluido en el precio.</p>
   </div>
 
   <div class="footer">
-    <p>Este comprobante es un documento interno de servicio.</p>
-    <p>Gracias por utilizar nuestro parqueadero.</p>
-    <p style="margin-top: 10px;">Sistema de Gestión de Parqueaderos - ${new Date().getFullYear()}</p>
+    ${invoice.cufe ? `
+      <div style="display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap;">
+        ${qrDataUri ? `<img src="${qrDataUri}" alt="QR CUFE" width="120" height="120" />` : ''}
+        <div style="text-align:left;max-width:420px;">
+          <p style="font-weight:bold;">CUFE:</p>
+          <p style="word-break:break-all;font-family:monospace;font-size:10px;">${invoice.cufe}</p>
+          <p style="margin-top:6px;font-size:11px;color:#888;">
+            Ambiente de pruebas — representación impresa de factura electrónica.
+          </p>
+        </div>
+      </div>
+    ` : ''}
+    <p style="margin-top:14px;">Gracias por utilizar nuestro parqueadero.</p>
+    <p style="margin-top: 6px;">Generado por Sistema de Gestión de Parqueaderos - ${new Date().getFullYear()}</p>
   </div>
 
   <div class="no-print" style="text-align: center; margin-top: 30px;">

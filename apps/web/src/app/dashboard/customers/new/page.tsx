@@ -1,13 +1,22 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { customerService, CreateCustomerDto } from '@/services/customerService';
+import { agreementsService, Agreement } from '@/services/agreements.service';
 
 export default function NewCustomerPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [agreements, setAgreements] = useState<Agreement[]>([]);
+
+  useEffect(() => {
+    agreementsService
+      .list({ activeOnly: true })
+      .then(setAgreements)
+      .catch(() => setAgreements([]));
+  }, []);
   const [formData, setFormData] = useState<CreateCustomerDto>({
     documentType: 'CC',
     documentNumber: '',
@@ -35,9 +44,11 @@ export default function NewCustomerPage() {
       if (formData.email) data.email = formData.email;
       if (formData.address) data.address = formData.address;
       if (formData.notes) data.notes = formData.notes;
+      if (formData.agreementId) data.agreementId = formData.agreementId;
 
-      const customer = await customerService.create(data);
-      router.push(`/dashboard/customers/${customer.id}`);
+      const customer: any = await customerService.create(data);
+      const newId = customer?.data?.id ?? customer?.id;
+      router.push(`/dashboard/customers/${newId}`);
     } catch (err: any) {
       console.error('Error creating customer:', err);
       setError(
@@ -196,6 +207,30 @@ export default function NewCustomerPage() {
               placeholder="Información adicional del cliente..."
               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none"
             />
+          </div>
+
+          {/* Convenio */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Convenio (descuento aplicado en el checkout)
+            </label>
+            <select
+              name="agreementId"
+              value={formData.agreementId || ''}
+              onChange={handleChange}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
+            >
+              <option value="">Sin convenio</option>
+              {agreements.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name} (
+                  {a.discountType === 'PERCENT'
+                    ? `${a.discountValue}%`
+                    : `$${a.discountValue.toLocaleString('es-CO')}`}
+                  )
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Submit Buttons */}

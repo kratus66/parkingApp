@@ -1,8 +1,26 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { InvoiceService } from './invoice.service';
-import { Repository } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { CustomerInvoice, InvoiceStatus } from '../../entities/customer-invoice.entity';
+import { CustomerInvoiceItem } from '../../entities/customer-invoice-item.entity';
+import { AuditLog } from '../audit/entities/audit-log.entity';
+import { ParkingLot } from '../parking-lots/entities/parking-lot.entity';
+
+// Mock genérico de repositorio TypeORM para providers no ejercitados en estos tests
+const mockRepositoryFactory = () => ({
+  find: jest.fn(),
+  findOne: jest.fn(),
+  save: jest.fn(),
+  create: jest.fn(),
+  createQueryBuilder: jest.fn(() => ({
+    leftJoinAndSelect: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
+    andWhere: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
+    getMany: jest.fn(),
+  })),
+});
 
 describe('InvoiceService', () => {
   let service: InvoiceService;
@@ -13,7 +31,11 @@ describe('InvoiceService', () => {
     companyId: 'company-1',
     parkingLotId: 'lot-1',
     invoiceNumber: 'INV-00000001',
+    subtotal: 10000,
+    discounts: 0,
     total: 10000,
+    currency: 'COP',
+    issuedAt: new Date('2024-01-15T12:00:00Z'),
     status: InvoiceStatus.ISSUED,
     items: [
       {
@@ -29,7 +51,7 @@ describe('InvoiceService', () => {
       ticketNumber: 'TICKET-001',
       vehicle: {
         vehicleType: 'CAR',
-        licensePlate: 'ABC123',
+        plate: 'ABC123',
       },
       parkingLot: {
         legalName: 'Parqueadero Test',
@@ -63,7 +85,19 @@ describe('InvoiceService', () => {
           },
         },
         {
-          provide: 'DataSource',
+          provide: getRepositoryToken(CustomerInvoiceItem),
+          useFactory: mockRepositoryFactory,
+        },
+        {
+          provide: getRepositoryToken(AuditLog),
+          useFactory: mockRepositoryFactory,
+        },
+        {
+          provide: getRepositoryToken(ParkingLot),
+          useFactory: mockRepositoryFactory,
+        },
+        {
+          provide: DataSource,
           useValue: {
             transaction: jest.fn(),
           },
@@ -92,7 +126,7 @@ describe('InvoiceService', () => {
       expect(html).toContain('INV-00000001');
       expect(html).toContain('ABC123');
       expect(html).toContain('Test User');
-      expect(html).toContain('10,000'); // Formatted amount
+      expect(html).toContain('10.000'); // Monto formateado es-CO (punto de miles)
     });
 
     it('should include voided status in HTML if invoice is voided', async () => {

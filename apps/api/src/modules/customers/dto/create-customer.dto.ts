@@ -5,6 +5,7 @@ import {
   IsNotEmpty,
   IsEmail,
   IsOptional,
+  IsUUID,
   MinLength,
   MaxLength,
   Matches,
@@ -86,4 +87,12 @@ export class CreateCustomerDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiProperty({
+    description: 'Convenio al que pertenece el cliente (opcional)',
+    required: false,
+  })
+  @IsOptional()
+  @IsUUID()
+  agreementId?: string;
 }

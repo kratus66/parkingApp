@@ -10,6 +10,7 @@ import { CheckOutModal } from '@/components/modals/CheckOutModal';
 import { useDashboardData } from '@/lib/useDashboardData';
 import { LogOut, Wallet, AlertCircle } from 'lucide-react';
 import { shiftsApi } from '@/services/shifts.service';
+import { useActiveParkingLotId } from '@/lib/parkingContext';
 import type { CashShift } from '@/types/cash';
 import Link from 'next/link';
 
@@ -27,29 +28,17 @@ export default function DashboardPage() {
   // Estados para verificación de turno de caja
   const [currentShift, setCurrentShift] = useState<CashShift | null>(null);
   const [loadingShift, setLoadingShift] = useState(true);
-  const [parkingLotId, setParkingLotId] = useState<string>('');
-  
-  // Cargar turno de caja actual
+  const parkingLotId = useActiveParkingLotId();
+
+  // Cargar turno de caja actual cuando se resuelve el parqueadero activo
   useEffect(() => {
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      try {
-        const user = JSON.parse(userStr);
-        const lotId = user.parkingLot?.id;
-        if (lotId) {
-          setParkingLotId(lotId);
-          loadCurrentShift(lotId);
-        } else {
-          setLoadingShift(false);
-        }
-      } catch (error) {
-        console.error('Error parsing user data:', error);
-        setLoadingShift(false);
-      }
+    if (parkingLotId) {
+      loadCurrentShift(parkingLotId);
     } else {
       setLoadingShift(false);
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parkingLotId]);
 
   const loadCurrentShift = async (lotId: string) => {
     try {
@@ -63,22 +52,8 @@ export default function DashboardPage() {
     }
   };
   
-  // ID del parqueadero - obtener del usuario autenticado
-  const getParkingLotId = () => {
-    if (parkingLotId) return parkingLotId;
-    if (typeof window === 'undefined') return 'b04f6eec-264b-4143-9b71-814b05d4ffc4';
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      try {
-        const user = JSON.parse(userStr);
-        return user.parkingLot?.id || 'b04f6eec-264b-4143-9b71-814b05d4ffc4';
-      } catch {
-        return 'b04f6eec-264b-4143-9b71-814b05d4ffc4';
-      }
-    }
-    return 'b04f6eec-264b-4143-9b71-814b05d4ffc4';
-  };
-  const parkingLotIdValue = getParkingLotId();
+  // ID del parqueadero activo (del selector / perfil del usuario)
+  const parkingLotIdValue = parkingLotId;
 
   // Handler para registro de vehículos
   const handleRegisterVehicle = (vehicleType: string) => {

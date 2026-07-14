@@ -15,6 +15,9 @@ import { CashShift, CashShiftStatus } from '../../entities/cash-shift.entity';
 import { CashPolicy } from '../../entities/cash-policy.entity';
 import { PricingService } from '../pricing/pricing.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AgreementsService } from '../agreements/agreements.service';
+import { BillingService } from '../billing/billing.service';
+import { FiscalService } from '../billing/fiscal.service';
 // import { OccupancyGateway } from '../occupancy/occupancy.gateway';
 import { CheckoutPreviewDto, CheckoutConfirmDto, PaymentItemDto } from './dto/checkout.dto';
 import { InvoiceService } from './invoice.service';
@@ -46,6 +49,9 @@ export class CheckoutService {
     private cashPolicyRepo: Repository<CashPolicy>,
     private pricingService: PricingService,
     private notificationsService: NotificationsService,
+    private agreementsService: AgreementsService,
+    private billingService: BillingService,
+    private fiscalService: FiscalService,
     // TODO: Implement OccupancyGateway
     // private occupancyGateway: OccupancyGateway,
     private invoiceService: InvoiceService,
@@ -84,14 +90,26 @@ export class CheckoutService {
       exitAt: exitAt.toISOString(),
     }, companyId);
 
-    let total = quote.total;
+    const baseTotal = quote.total;
 
     // Aplicar cargo por ticket perdido (ejemplo: 20% adicional o mínimo 5000 COP)
-    if (dto.lostTicket) {
-      const lostTicketFee = Math.max(5000, Math.round(total * 0.2));
-      total += lostTicketFee;
-      // Lost ticket fee is already calculated by pricing service
-    }
+    const lostTicketFee = dto.lostTicket
+      ? Math.max(5000, Math.round(baseTotal * 0.2))
+      : 0;
+
+    // Resolver convenio: el indicado explícitamente o el del cliente
+    const agreement = await this.agreementsService.resolve(
+      dto.agreementId ?? session.customer?.agreementId,
+      companyId,
+    );
+    // El descuento aplica sobre el servicio de parqueo (no sobre la multa)
+    const discount = this.agreementsService.computeDiscount(agreement, baseTotal, exitAt);
+
+    const grossTotal = baseTotal + lostTicketFee;
+    const total = grossTotal - discount;
+
+    // Desglose de IVA (el total ya incluye IVA 19%)
+    const tax = this.fiscalService.extractTaxFromGross(total, 19);
 
     const totalMinutes = Math.round((exitAt.getTime() - session.entryAt.getTime()) / 60000);
 
@@ -103,6 +121,14 @@ export class CheckoutService {
       totalMinutes,
       vehicleType,
       quote,
+      subtotal: grossTotal,
+      discount,
+      taxableBase: tax.taxableBase,
+      taxRate: tax.taxRate,
+      taxAmount: tax.taxAmount,
+      agreement: agreement
+        ? { id: agreement.id, name: agreement.name, discountType: agreement.discountType, discountValue: agreement.discountValue }
+        : null,
       total,
       customer: session.customer,
       vehicle: session.vehicle,
@@ -182,13 +208,25 @@ export class CheckoutService {
         exitAt: exitAt.toISOString(),
       }, companyId);
 
-      let total = quote.total;
+      const baseTotal = quote.total;
 
-      if (dto.lostTicket) {
-        const lostTicketFee = Math.max(5000, Math.round(total * 0.2));
-        total += lostTicketFee;
-        // Lost ticket fee is already calculated by pricing service
-      }
+      const lostTicketFee = dto.lostTicket
+        ? Math.max(5000, Math.round(baseTotal * 0.2))
+        : 0;
+
+      // Resolver convenio y calcular descuento (sobre el servicio, no la multa)
+      const agreement = await this.agreementsService.resolve(
+        dto.agreementId ?? session.customer?.agreementId,
+        companyId,
+      );
+      const discount = this.agreementsService.computeDiscount(
+        agreement,
+        baseTotal,
+        exitAt,
+      );
+
+      const grossTotal = baseTotal + lostTicketFee;
+      const total = grossTotal - discount;
 
       // 3. Validar suma de pagos
       const paymentTotal = dto.paymentItems.reduce((sum, item) => sum + item.amount, 0);
@@ -198,9 +236,11 @@ export class CheckoutService {
         );
       }
 
-      // 4. Validar CASH: receivedAmount >= amount
+      // 4. Validar CASH: receivedAmount >= amount (solo si hay monto a cobrar).
+      // Cuando el total es 0 (p. ej. dentro del periodo de gracia) no se exige
+      // monto recibido, para permitir la salida sin cobro.
       dto.paymentItems.forEach((item) => {
-        if (item.method === PaymentMethod.CASH) {
+        if (item.method === PaymentMethod.CASH && item.amount > 0) {
           if (!item.receivedAmount || item.receivedAmount < item.amount) {
             throw new BadRequestException(
               `Para pago en efectivo, el monto recibido debe ser mayor o igual al monto a pagar`,
@@ -255,8 +295,33 @@ export class CheckoutService {
       });
       await manager.save(paymentItems);
 
-      // 8. Generar factura
-      const invoiceNumber = await this.getNextInvoiceNumber(parkingLotId, manager);
+      // 8. Numeración: usar resolución DIAN si existe, si no, contador simple
+      const numbering = await this.billingService.nextNumber(
+        manager,
+        parkingLotId,
+        companyId,
+      );
+      const invoiceNumber =
+        numbering?.invoiceNumber ??
+        (await this.getNextInvoiceNumber(parkingLotId, manager));
+
+      // Cálculo fiscal: el total neto YA incluye IVA (19%)
+      const TAX_RATE = 19;
+      const tax = this.fiscalService.extractTaxFromGross(total, TAX_RATE);
+
+      // CUFE (estructura DIAN; requiere clave técnica real para validez)
+      const cufe = this.fiscalService.computeCufe({
+        invoiceNumber,
+        issuedAt: exitAt,
+        taxableBase: tax.taxableBase,
+        taxAmount: tax.taxAmount,
+        total,
+        sellerNit: session.parkingLot?.legalNit || '',
+        buyerDoc: session.customer?.documentNumber || '',
+        technicalKey: numbering?.technicalKey || '',
+        environment: numbering?.environment ?? 2,
+      });
+
       const invoice = manager.create(CustomerInvoice, {
         companyId,
         parkingLotId,
@@ -264,9 +329,14 @@ export class CheckoutService {
         customerId: session.customerId || undefined,
         invoiceNumber,
         issuedAt: exitAt,
-        subtotal: total,
-        discounts: 0,
+        subtotal: grossTotal,
+        discounts: discount,
         total,
+        taxableBase: tax.taxableBase,
+        taxRate: tax.taxRate,
+        taxAmount: tax.taxAmount,
+        cufe,
+        resolutionNumber: numbering?.resolutionNumber ?? null,
         currency: 'COP',
         status: InvoiceStatus.ISSUED,
       });
@@ -277,8 +347,8 @@ export class CheckoutService {
         customerInvoiceId: invoice.id,
         description: 'Servicio de parqueo',
         quantity: 1,
-        unitPrice: total,
-        total,
+        unitPrice: grossTotal,
+        total: grossTotal,
       });
       await manager.save(invoiceItem);
 
@@ -299,7 +369,7 @@ export class CheckoutService {
       // 12. AuditLog
       await manager.save(AuditLog, {
         companyId,
-        userId,
+        actorUserId: userId,
         action: AuditAction.CHECKOUT_CONFIRM,
         entityType: 'ParkingSession',
         entityName: 'ParkingSession',
@@ -310,7 +380,7 @@ export class CheckoutService {
 
       await manager.save(AuditLog, {
         companyId,
-        userId,
+        actorUserId: userId,
         action: AuditAction.SPOT_RELEASED,
         entityType: 'ParkingSpot',
         entityName: 'ParkingSpot',
@@ -321,7 +391,7 @@ export class CheckoutService {
 
       await manager.save(AuditLog, {
         companyId,
-        userId,
+        actorUserId: userId,
         action: AuditAction.PAYMENT_CREATED,
         entityType: 'Payment',
         entityName: 'Payment',
@@ -332,7 +402,7 @@ export class CheckoutService {
 
       await manager.save(AuditLog, {
         companyId,
-        userId,
+        actorUserId: userId,
         action: AuditAction.INVOICE_ISSUED,
         entityType: 'CustomerInvoice',
         entityName: 'CustomerInvoice',

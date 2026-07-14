@@ -50,6 +50,23 @@ export class CustomerInvoice {
   @Column({ type: 'int', comment: 'Total en COP (centavos)' })
   total: number;
 
+  // Campos fiscales (IVA incluido en el precio)
+  @Column({ type: 'int', default: 0, name: 'taxable_base', comment: 'Base gravable en COP' })
+  taxableBase: number;
+
+  @Column({ type: 'int', default: 0, name: 'tax_rate', comment: 'Tasa de IVA (%)' })
+  taxRate: number;
+
+  @Column({ type: 'int', default: 0, name: 'tax_amount', comment: 'Valor del IVA en COP' })
+  taxAmount: number;
+
+  // Facturación electrónica (DIAN)
+  @Column({ type: 'varchar', length: 96, name: 'cufe', nullable: true, comment: 'CUFE/CUDE DIAN' })
+  cufe: string | null;
+
+  @Column({ type: 'varchar', length: 50, name: 'resolution_number', nullable: true })
+  resolutionNumber: string | null;
+
   @Column({ type: 'varchar', length: 3, default: 'COP' })
   currency: string;
 

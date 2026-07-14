@@ -57,9 +57,6 @@ export default function TicketsPage() {
   const [total, setTotal] = useState(0);
   const limit = 15;
 
-  // ID del parqueadero (debería venir del contexto del usuario)
-  const parkingLotId = 'b04f6eec-264b-4143-9b71-814b05d4ffc4';
-
   useEffect(() => {
     loadSessions();
   }, [page, searchQuery, statusFilter, dateFrom, dateTo]);
@@ -323,7 +320,7 @@ export default function TicketsPage() {
                         </div>
                         {session.spot && (
                           <div className="text-xs text-slate-400">
-                            {session.spot.code} - {session.spot.zone.name}
+                            {session.spot.code}{session.spot.zone ? ` - ${session.spot.zone.name}` : ''}
                           </div>
                         )}
                       </td>

@@ -37,16 +37,19 @@ export default function CustomerDetailPage() {
       console.log('Consents Response:', consentsResponse);
 
       // Manejar respuesta anidada del cliente
-      const customerData = customerResponse?.data || customerResponse;
+      // NOTA (Sprint A): el backend envuelve todo en { data, meta } vía TransformInterceptor
+      // global, pero los servicios están tipados como si devolvieran la entidad directa.
+      // Este manejo defensivo es correcto en runtime; se limpiará al unificar el contrato.
+      const customerData = (customerResponse as any)?.data || customerResponse;
       setCustomer(customerData);
       setFormData(customerData);
 
       // Manejar respuesta anidada de vehículos
-      const vehiclesData = vehiclesResponse?.data || vehiclesResponse;
+      const vehiclesData = (vehiclesResponse as any)?.data || vehiclesResponse;
       setVehicles(Array.isArray(vehiclesData) ? vehiclesData : []);
 
       // Manejar respuesta anidada de consentimientos
-      const consentsData = consentsResponse?.data || consentsResponse;
+      const consentsData = (consentsResponse as any)?.data || consentsResponse;
       setConsents(consentsData);
     } catch (error) {
       console.error('Error loading customer data:', error);

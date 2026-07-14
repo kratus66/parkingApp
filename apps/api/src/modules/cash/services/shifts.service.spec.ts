@@ -6,7 +6,7 @@ import { CashPolicy } from '../../../entities/cash-policy.entity';
 import { CashMovement, CashMovementType } from '../../../entities/cash-movement.entity';
 import { CashCount } from '../../../entities/cash-count.entity';
 import { Payment, PaymentStatus } from '../../../entities/payment.entity';
-import { AuditLog } from '../../../entities/audit-log.entity';
+import { AuditLog } from '../../audit/entities/audit-log.entity';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 
 describe('ShiftsService', () => {
@@ -103,7 +103,8 @@ describe('ShiftsService', () => {
       };
 
       policyRepo.findOne.mockResolvedValue(null); // No policy
-      shiftsRepo.save.mockResolvedValue({ id: 'shift-1', ...dto });
+      // mockResolvedValueOnce: evita fuga entre tests (clearAllMocks no resetea implementaciones)
+      shiftsRepo.save.mockResolvedValueOnce({ id: 'shift-1', ...dto });
 
       const result = await service.openShift(dto, 'user-1', 'company-1');
 

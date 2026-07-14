@@ -355,7 +355,8 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
         try {
           const newCustomer: any = await customerService.create(customerData);
           console.log('✅ Cliente creado:', newCustomer);
-          customerId = newCustomer.id;
+          // Resiliente al envelope { data, meta } o al objeto directo
+          customerId = newCustomer?.data?.id ?? newCustomer?.id;
         } catch (error: any) {
           // Si falla porque ya existe, intentar identificarlo
           if (error.response?.status === 409) {
@@ -391,9 +392,10 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
         
         console.log('🚗 Creando vehículo:', vehiclePayload);
         try {
-          const createdVehicle = await vehicleService.create(vehiclePayload);
+          const createdVehicle: any = await vehicleService.create(vehiclePayload);
           console.log('✅ Vehículo creado:', createdVehicle);
-          vehicleId = createdVehicle.id;
+          // Resiliente al envelope { data, meta } o al objeto directo
+          vehicleId = createdVehicle?.data?.id ?? createdVehicle?.id;
         } catch (error: any) {
           // Si falla porque ya existe, intentar identificarlo por placa
           if (error.response?.status === 409) {

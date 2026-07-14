@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Search,
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { checkoutApi } from '@/services/checkout.service';
 import { parkingSessionsApi } from '@/services/parking-sessions.service';
+import { agreementsService, Agreement } from '@/services/agreements.service';
 import { PaymentMethod, PaymentItem, CheckoutPreview } from '@/types/checkout';
 
 export default function CheckoutPage() {
@@ -36,6 +37,33 @@ export default function CheckoutPage() {
   const [processing, setProcessing] = useState(false);
   const [completed, setCompleted] = useState(false);
   const [invoiceHtml, setInvoiceHtml] = useState('');
+  const [agreements, setAgreements] = useState<Agreement[]>([]);
+  const [selectedAgreementId, setSelectedAgreementId] = useState<string>('');
+
+  useEffect(() => {
+    agreementsService
+      .list({ activeOnly: true })
+      .then(setAgreements)
+      .catch(() => setAgreements([]));
+  }, []);
+
+  // Recalcula el preview aplicando ticket perdido y convenio seleccionados
+  const reprice = async (sessionId: string, lost: boolean, agreementId: string) => {
+    try {
+      const previewData = await checkoutApi.preview(
+        sessionId,
+        lost,
+        agreementId || undefined,
+      );
+      setPreview(previewData);
+      // Reflejar el convenio auto-aplicado (del cliente) en el selector
+      if (!agreementId && previewData.agreement?.id) {
+        setSelectedAgreementId(previewData.agreement.id);
+      }
+    } catch (error: any) {
+      alert('Error al calcular: ' + (error.response?.data?.message || error.message));
+    }
+  };
 
   const handleSearch = async () => {
     if (!searchTerm.trim()) return;
@@ -58,13 +86,15 @@ export default function CheckoutPage() {
     setSelectedSession(session);
     setSessions([]);
     setSearchTerm('');
+    setSelectedAgreementId('');
+    // Automáticamente previsualizar (el convenio del cliente se aplica solo)
+    await reprice(session.id, lostTicket, '');
+  };
 
-    // Automáticamente previsualizar
-    try {
-      const previewData = await checkoutApi.preview(session.id, lostTicket);
-      setPreview(previewData);
-    } catch (error: any) {
-      alert('Error al calcular: ' + (error.response?.data?.message || error.message));
+  const handleAgreementChange = async (agreementId: string) => {
+    setSelectedAgreementId(agreementId);
+    if (selectedSession) {
+      await reprice(selectedSession.id, lostTicket, agreementId);
     }
   };
 
@@ -125,7 +155,12 @@ export default function CheckoutPage() {
 
     setProcessing(true);
     try {
-      const result = await checkoutApi.confirm(selectedSession.id, paymentItems, lostTicket);
+      const result = await checkoutApi.confirm(
+        selectedSession.id,
+        paymentItems,
+        lostTicket,
+        selectedAgreementId || undefined,
+      );
       setInvoiceHtml(result.printableInvoiceHtml);
       setCompleted(true);
       alert('✅ Salida registrada exitosamente');
@@ -316,15 +351,64 @@ export default function CheckoutPage() {
                     <input
                       type="checkbox"
                       checked={lostTicket}
-                      onChange={(e) => setLostTicket(e.target.checked)}
+                      onChange={(e) => {
+                        setLostTicket(e.target.checked);
+                        if (selectedSession)
+                          reprice(selectedSession.id, e.target.checked, selectedAgreementId);
+                      }}
                       className="w-4 h-4"
                     />
                     <span className="text-sm">Ticket perdido (+20% o mín $5,000)</span>
                   </label>
                 </div>
 
+                {/* Convenio / descuento */}
                 <div className="pt-4 border-t">
-                  <p className="text-lg font-semibold text-gray-800">Total a Cobrar</p>
+                  <label className="block text-sm text-gray-600 mb-1">Convenio (descuento)</label>
+                  <select
+                    value={selectedAgreementId}
+                    onChange={(e) => handleAgreementChange(e.target.value)}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-800"
+                  >
+                    <option value="">Sin convenio</option>
+                    {agreements.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name} (
+                        {a.discountType === 'PERCENT'
+                          ? `${a.discountValue}%`
+                          : `$${a.discountValue.toLocaleString('es-CO')}`}
+                        )
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="pt-4 border-t space-y-1">
+                  {preview.discount != null && preview.discount > 0 && (
+                    <>
+                      <div className="flex justify-between text-sm text-gray-600">
+                        <span>Subtotal</span>
+                        <span>${(preview.subtotal ?? preview.total).toLocaleString('es-CO')}</span>
+                      </div>
+                      <div className="flex justify-between text-sm text-green-700">
+                        <span>Descuento{preview.agreement ? ` (${preview.agreement.name})` : ''}</span>
+                        <span>-${preview.discount.toLocaleString('es-CO')}</span>
+                      </div>
+                    </>
+                  )}
+                  {preview.taxAmount != null && preview.taxAmount > 0 && (
+                    <>
+                      <div className="flex justify-between text-sm text-gray-600">
+                        <span>Base gravable</span>
+                        <span>${(preview.taxableBase ?? 0).toLocaleString('es-CO')}</span>
+                      </div>
+                      <div className="flex justify-between text-sm text-gray-600">
+                        <span>IVA ({preview.taxRate ?? 19}%)</span>
+                        <span>${preview.taxAmount.toLocaleString('es-CO')}</span>
+                      </div>
+                    </>
+                  )}
+                  <p className="text-lg font-semibold text-gray-800 pt-1">Total a Cobrar</p>
                   <p className="text-3xl font-bold text-green-600">
                     ${preview.total.toLocaleString('es-CO')} COP
                   </p>
