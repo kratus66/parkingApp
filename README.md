@@ -59,7 +59,7 @@ parkingApp/
 ├── apps/
 │   ├── api/              # Backend NestJS
 │   │   └── src/
-│   │       ├── modules/  # 23 módulos de negocio (ver docs/ARCHITECTURE.md)
+│   │       ├── modules/  # 22 módulos de negocio (ver docs/ARCHITECTURE.md)
 │   │       ├── entities/ # Entidades TypeORM compartidas
 │   │       ├── common/   # Guards, decorators, filters, interceptors
 │   │       ├── database/ # Data source, migraciones, seeds

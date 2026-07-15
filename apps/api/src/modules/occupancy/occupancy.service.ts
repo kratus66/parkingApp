@@ -142,8 +142,6 @@ export class OccupancyService {
   }
 
   async getAvailableSpots(companyId: string, parkingLotId: string, vehicleType: VehicleType) {
-    console.log('🔍 [getAvailableSpots] Buscando puestos con:', { companyId, parkingLotId, vehicleType });
-    
     const spots = await this.spotRepository
       .createQueryBuilder('spot')
       .leftJoinAndSelect('spot.zone', 'zone')
@@ -154,9 +152,6 @@ export class OccupancyService {
       .orderBy('spot.priority', 'DESC')
       .addOrderBy('spot.code', 'ASC')
       .getMany();
-
-    console.log('✅ [getAvailableSpots] Puestos encontrados:', spots.length);
-    console.log('📋 [getAvailableSpots] Puestos:', spots.map(s => ({ code: s.code, type: s.spotType, status: s.status })));
 
     return spots;
   }

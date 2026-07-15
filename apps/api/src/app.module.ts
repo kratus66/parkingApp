@@ -6,7 +6,6 @@ import { UsersModule } from './modules/users/users.module';
 import { CompaniesModule } from './modules/companies/companies.module';
 import { ParkingLotsModule } from './modules/parking-lots/parking-lots.module';
 import { AuditModule } from './modules/audit/audit.module';
-import { VehiclesModule } from './modules/vehicles/vehicles.module';
 import { TicketsModule } from './modules/tickets/tickets.module';
 // Sprint 2 modules
 import { CustomersModule } from './modules/customers/customers.module';
@@ -45,7 +44,6 @@ import { HealthController } from './health.controller';
     CompaniesModule,
     ParkingLotsModule,
     AuditModule,
-    VehiclesModule,
     TicketsModule,
     // Sprint 2
     CustomersModule,

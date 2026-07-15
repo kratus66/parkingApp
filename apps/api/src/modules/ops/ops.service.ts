@@ -33,26 +33,20 @@ export class OpsService {
    * Endpoint para flujo rápido de taquilla
    */
   async identify(identifyDto: IdentifyDto, user: User) {
-    console.log('🔍 Identify request:', identifyDto);
-    console.log('👤 User companyId:', user.companyId);
-    
+    // (F5) No se registran datos personales (placa/documento/cliente) en logs.
     let customer: Customer | null = null;
     let vehicles: Vehicle[] = [];
 
     // Intentar por placa
     if (identifyDto.vehiclePlate) {
-      console.log('🚗 Buscando por placa:', identifyDto.vehiclePlate);
       const vehicle = await this.vehiclesService.findByPlate(
         identifyDto.vehiclePlate,
         user.companyId,
       );
-      console.log('✅ Vehículo encontrado:', vehicle ? 'SÍ' : 'NO');
 
       if (vehicle) {
         customer = vehicle.customer;
         vehicles = customer.vehicles || [vehicle];
-        console.log('👤 Cliente encontrado:', customer?.fullName);
-        console.log('🚗 Vehículos del cliente:', vehicles.length);
       }
     }
 
@@ -196,8 +190,6 @@ export class OpsService {
       this.getVehicleTypeOccupancy(parkingLotId, 'MOTORCYCLE'),
     ]);
 
-    console.log('🔍 vehicleTypeStats:', JSON.stringify(vehicleTypeStats, null, 2));
-
     // Calcular totales
     const totalOccupied = vehicleTypeStats.reduce((sum, stat) => sum + stat.occupied, 0);
     const totalCapacity = vehicleTypeStats.reduce((sum, stat) => sum + stat.capacity, 0);
@@ -268,8 +260,6 @@ export class OpsService {
       ],
       alerts: await this.getAlerts(parkingLotId),
     };
-
-    console.log('✅ Dashboard Response:', JSON.stringify(dashboardResponse, null, 2));
 
     return dashboardResponse;
   }

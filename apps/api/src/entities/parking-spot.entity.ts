@@ -79,7 +79,7 @@ export class ParkingSpot {
   priority: number;
 
   @Column({ type: 'uuid', nullable: true, name: 'session_id' })
-  sessionId?: string;
+  sessionId?: string | null;
 
   @Column({ name: 'last_status_change', nullable: true })
   lastStatusChange?: Date;

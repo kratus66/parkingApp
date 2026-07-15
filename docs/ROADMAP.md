@@ -122,28 +122,42 @@ empresas. Todo es corrección de código sin decisiones de negocio pendientes.
 
 ---
 
-## Sprint F — Endurecimiento y limpieza
+## Sprint F — Endurecimiento y limpieza (parcial)
 
-- **F1 (H14)**: migrar columnas de fecha a `timestamptz`; hacer que el motor use el
-  `timezone` del plan tarifario. Crítico antes de desplegar fuera de America/Bogota o de
-  transmitir facturas reales a la DIAN.
-- **F2 (H16)**: quitar URLs hardcodeadas `localhost:3002` en
-  `app/dashboard/pricing/*.tsx`, `pricing/simulator/page.tsx` y `components/LiveQuote.tsx`
-  (usar `lib/api.ts`); hacer que `main.ts` lea `CORS_ORIGIN` en vez del array hardcodeado.
-- **F3**: retirar módulos legacy `vehicles` (v1) y `tickets` (endpoints + tablas o al menos
-  desmontar los controladores). Si la **blacklist** interesa como feature, portarla a
-  `vehicles_v2` y consultarla en el check-in; si no, eliminarla.
-- **F4**: unificar el contrato de respuesta (doble envoltura `{data:{data,meta}}` del
-  `TransformInterceptor`) y tipar `ApiResponse<T>` en el front.
-- **F5**: limpiar `console.log` con PII (clientes, placas) de los servicios; reemplazar por
-  `Logger` de Nest con niveles.
-- **F6**: `checkout.confirm` debe liberar el puesto vía `releaseSpotSimple`/`releaseSpot`
-  (limpia `sessionId` + escribe `spot_status_history`) en vez de mutar el spot a mano (H11).
-- **F7**: ticket `YYYYMMDD-####`: reiniciar el consecutivo por día o quitar la fecha del
-  formato (hoy la fecha es cosmética).
-- **F8**: seguridad de sesión: expiración corta + refresh token, y migrar el token de
-  `localStorage` a cookie httpOnly.
-- **F9**: implementar el gateway realtime (hoy stub) o eliminarlo y estandarizar polling.
+> **Estado (2026-07-15)**: **F2, F3, F5, F6 COMPLETADOS** en la rama
+> `sprint-f-endurecimiento` (build api+web OK, tests 34/34). **F1, F4, F7, F8 y F9
+> DIFERIDOS** por riesgo/decisión (ver notas). Los completados van con ✅.
+
+- **F1 (H14)** — *diferido*: migrar columnas de fecha a `timestamptz` y hacer que el motor use
+  el `timezone` del plan. Es una migración de datos + rework del motor (hoy usa la hora local
+  del proceso vía `getHours()`, sin librería TZ-aware). Merece su propio sprint enfocado;
+  hacerlo a medias arriesga romper el cobro. Crítico antes de desplegar fuera de
+  America/Bogota o transmitir facturas reales a la DIAN.
+- **F2 (H16) ✅**: `main.ts` lee `CORS_ORIGIN` (lista separada por comas, con fallback a
+  3000/3003/3005); se corrigieron `.env`/`.env.example`. Se eliminaron las URLs hardcodeadas
+  `localhost:3002` en `pricing`, `simulator` y `LiveQuote` (ahora `NEXT_PUBLIC_API_URL`), y se
+  corrigieron los fallbacks de `lib/api.ts` y `services/checkout.service.ts` (3002→3001).
+- **F3 ✅**: retirados el flujo legacy `tickets` (`TicketsController`/`TicketsService`, que
+  cobraba con tarifas fijas y usaba vehicles v1) y **todo** el módulo `vehicles` (v1). Se
+  conservó `TicketTemplatesService` (lo usa parking-sessions para el contenido del ticket).
+  Las **entidades** `Ticket` y `Vehicle` (v1) se mantienen porque `parking-lot.entity` y
+  `notification-log.entity` las referencian; retirar sus tablas queda para una limpieza de
+  esquema. La blacklist de v1 no se portó (no estaba en uso).
+- **F4** — *diferido*: unificar el contrato de respuesta (doble envoltura
+  `{data:{data,meta}}` del `TransformInterceptor`) y tipar `ApiResponse<T>`. Toca muchos
+  consumidores del front (hoy lo manejan defensivamente); hacerlo mal rompe la UI.
+- **F5 ✅**: eliminados los `console.log` que volcaban PII (nombre/documento/teléfono/email de
+  clientes, placas) en `ops`, `parking-sessions` y `occupancy` (incluido el
+  `JSON.stringify(ticketResponse)` del check-in).
+- **F6 (H11) ✅**: `checkout.confirm` libera el puesto limpiando `sessionId` +
+  `lastStatusChange` y escribiendo `spot_status_history`, en vez de solo mutar el estado.
+- **F7** — *diferido (menor)*: ticket `YYYYMMDD-####` con consecutivo que no reinicia por día.
+  ROI bajo (requiere columna de fecha + migración); la fecha del prefijo es cosmética.
+- **F8** — *diferido*: seguridad de sesión (expiración corta + refresh token, token en cookie
+  httpOnly en vez de `localStorage`). Refactor de seguridad front+back; su propio esfuerzo.
+- **F9** — *diferido*: el gateway realtime es un stub (100% comentado, no cableado). Decidir
+  entre **implementarlo** (live occupancy) o **eliminarlo** y estandarizar polling. Requiere
+  tu confirmación explícita para borrar el módulo.
 
 ## Backlog funcional (post-estabilización)
 

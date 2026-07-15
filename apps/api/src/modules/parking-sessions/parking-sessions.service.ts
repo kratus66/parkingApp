@@ -196,10 +196,6 @@ export class ParkingSessionsService {
       );
 
       // 9. Obtener datos completos para el ticket (antes de commit)
-      console.log('🎫 Preparando datos del ticket...');
-      console.log('📋 Vehicle customerId:', vehicle.customerId);
-      console.log('📋 ParkingLotId:', checkInDto.parkingLotId);
-
       const customer = vehicle.customerId ? await queryRunner.manager.findOne(Customer, {
         where: { id: vehicle.customerId }
       }) : null;
@@ -207,9 +203,6 @@ export class ParkingSessionsService {
       const parkingLot = await queryRunner.manager.findOne(ParkingLot, {
         where: { id: checkInDto.parkingLotId }
       });
-
-      console.log('✅ Customer encontrado:', !!customer);
-      console.log('✅ ParkingLot encontrado:', !!parkingLot);
 
       // 10. Commit de la transacción
       await queryRunner.commitTransaction();
@@ -310,7 +303,6 @@ export class ParkingSessionsService {
         },
       };
 
-      console.log('🎫 Ticket response preparado:', JSON.stringify(ticketResponse, null, 2));
       return ticketResponse;
     } catch (error) {
       // Solo hacer rollback si la transacción está activa
