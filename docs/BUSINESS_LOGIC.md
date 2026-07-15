@@ -199,7 +199,8 @@ Una por parqueadero. Valores por defecto al crearla:
 
 | Campo | Default | Efecto |
 |---|---|---|
-| `requireOpenShiftForCheckout` | `true` | Exige turno de caja abierto del operador para **check-in y checkout** ⚠️ (el nombre sugiere solo checkout, pero también bloquea el check-in) |
+| `requireOpenShiftForCheckIn` | `true` | (E6) Exige turno de caja abierto del operador para el **check-in** (entrada) |
+| `requireOpenShiftForCheckout` | `true` | Exige turno de caja abierto del operador para el **checkout** (salida/cobro) |
 | `defaultShiftHours` | 8 | Informativo |
 | `allowMultipleOpenShiftsPerCashier` | `false` | Un cajero no puede tener 2 turnos abiertos en el mismo lot |
 | `allowMultipleOpenShiftsPerParkingLot` | `true` | Varios cajeros pueden tener turno abierto a la vez |
@@ -285,11 +286,14 @@ Transaccional. Reglas en orden:
 
 ```
 baseTotal      = PricingEngine(entryAt → now)                 [sección 5]
-lostTicketFee  = lostTicket ? max(5000, 20% × baseTotal) : 0  ⚠️ regla distinta a config.lostTicketFee
 discount       = convenio (explícito o del cliente), solo sobre baseTotal, tope baseTotal
-total          = baseTotal + lostTicketFee − discount
+total          = baseTotal − discount
 IVA (informativo) = el total YA incluye IVA 19%: base = round(total/1.19), iva = total − base
 ```
+
+> **Sprint E (E4/H10)**: **no hay multa por tiquete perdido**. Si el cliente pierde el tiquete,
+> el cajero busca la sesión por placa (soportado), reimprime gratis y cobra la estancia normal.
+> Se eliminó el campo `lostTicket` del checkout y su toggle en la UI.
 
 **5b. Confirm** (`POST /checkout/confirm`): transacción única que:
 
@@ -321,9 +325,11 @@ IVA (informativo) = el total YA incluye IVA 19%: base = round(total/1.19), iva =
 (deja constancia en auditoría), `GET /payments`, `GET /payments/stats` (por método).
 
 **Anulaciones** (SUPERVISOR/ADMIN, motivo obligatorio): `POST /payments/:id/void` y
-`POST /checkout/invoices/:id/void` marcan `VOIDED` + auditoría.
-⚠️ La anulación es solo contable-documental: no reabre la sesión, no recalcula la caja y no
-genera devolución (la entidad `Refund` existe pero no se usa).
+`POST /checkout/invoices/:id/void` marcan `VOIDED` + auditoría. La sesión de parqueo **no**
+se reabre. **Sprint E (E5)**: al anular un **pago** cuyo turno de caja sigue **abierto**, se
+registra automáticamente un `CashMovement` de tipo `EXPENSE` por la **porción cobrada en
+efectivo** (devolución del cajón), para que el arqueo cuadre; los métodos no-efectivo no
+afectan la caja. La entidad `Refund` sigue sin uso (devolución formal = backlog).
 
 > ✅ **Sprint D (H1)**: la antigua ruta de salida legacy `POST /parking-sessions/:id/check-out`
 > (tarifas fijas en código, sin factura/pago/caja) **fue eliminada**. La salida con cobro se
@@ -358,29 +364,29 @@ usadas.
 ### Algoritmo
 
 1. **Minutos totales** = `floor((exitAt − entryAt) / 60s)`.
-2. **Gracia** (`PricingConfig.defaultGraceMinutes`, seed: 15):
+2. **Gracia** (`PricingConfig.defaultGraceMinutes`, seed: 15) — **E1**:
    - Si `totalMinutes ≤ grace` → **total $0** (salida libre). Fin.
-   - Si `totalMinutes > grace` → ⚠️ se cobra la estancia **completa** (la gracia no descuenta
-     minutos del cobro; el `billableMinutes` del breakdown es solo informativo).
+   - Si `totalMinutes > grace` → se cobra la estancia **completa** (decisión de negocio
+     confirmada). El desglose ahora reporta `billableMinutes = totalMinutes` y
+     `graceAppliedMinutes = 0` para no engañar.
 3. **Segmentación** del rango entrada→salida cortando en: medianoche, 06:00 y 19:00.
    Cada segmento se clasifica:
    - `dayType`: `HOLIDAY` (si la fecha está en `holidays`) > `WEEKEND` (sáb/dom) > `WEEKDAY`.
    - `period`: `DAY` (06:00–18:59) o `NIGHT` (19:00–05:59).
-4. **Regla aplicable** por segmento: `TariffRule` activa que coincida en
-   (lot, empresa, tipo vehículo, dayType, period). ⚠️ No se filtra por plan activo: si dos
-   planes tienen reglas activas para la misma combinación, se usa la primera que devuelva la
-   BD. Si **ningún** segmento tiene regla → 422 "No tariff rules configured".
-   Segmentos individuales sin regla se omiten silenciosamente (no se cobran).
+4. **Regla aplicable** por segmento: `TariffRule` activa **de un plan activo** que coincida en
+   (lot, empresa, tipo vehículo, dayType, period) — **E3**: se exige `tariffPlan.isActive`. Si
+   **ningún** segmento tiene regla → 422 "No tariff rules configured". Segmentos individuales
+   sin regla se omiten silenciosamente (no se cobran).
 5. **Cobro por segmento** = `max(unidades × unitPrice, minimumCharge)`, donde
    `unidades = redondeo(minutos / tamañoUnidad)` según `billingUnit` y `rounding`.
    ⚠️ El redondeo es **por segmento**: una estancia que cruza las 19:00 con unidad `HOUR` y
    `CEIL` paga el techo de cada tramo por separado (p. ej. 18:30→19:20 = 1h DAY + 1h NIGHT).
-6. **Tope diario** (`defaultDailyMax`): si el subtotal lo supera, se recorta.
-   ⚠️ Se aplica **una sola vez a toda la estancia**, no por cada día (una estancia de 3 días
-   queda topada como si fuera 1).
-7. **Tiquete perdido** (solo en `/pricing/quote` con `lostTicket: true`): suma
-   `config.lostTicketFee`. ⚠️ El checkout **no usa esta vía**: aplica su propia fórmula
-   `max(5000, 20 %)` (ver H10).
+6. **Tope diario** (`defaultDailyMax`) — **E2**: se aplica **por cada día calendario** (los
+   segmentos se agrupan por día y cada día se capa por separado). Una estancia multi-día
+   recibe un tope por día.
+7. **Tiquete perdido**: el checkout **no cobra multa** (E4). El motor conserva una opción
+   `lostTicket` genérica que solo el simulador puede usar como escenario; el flujo de cobro
+   real nunca la activa.
 
 ### Ejemplo con datos del seed (auto, martes 10:00 → 13:30)
 
@@ -517,13 +523,13 @@ Resumen priorizado de lo que el código hace hoy y requiere corrección o decisi
 
 | # | Hallazgo | Dónde |
 |---|---|---|
-| H7 | La **gracia no descuenta** minutos cuando se supera (¿negocio lo quiere así? documentar la decisión); `billableMinutes` del breakdown es engañoso. | `pricing-engine.service.ts:49-77` |
-| H8 | **`dailyMax` capa toda la estancia una sola vez**, no por día (estancias multi-día quedan casi gratis). | `pricing-engine.service.ts:114` |
-| H9 | El motor **ignora el plan activo**: reglas activas de planes desactivados siguen cobrando; activar un plan no desactiva las reglas del anterior. | `pricing-engine.service.ts:255`, `pricing.service.ts:98` |
-| H10 | **Multa por tiquete perdido duplicada e inconsistente**: checkout usa `max($5.000, 20 %)`; la config del parqueadero (`lostTicketFee`, seed $20.000) solo la usa el simulador. Unificar. | `checkout.service.ts:92,203` |
-| H11 | `checkout.confirm` libera el puesto **sin limpiar `sessionId` ni escribir `spot_status_history`** (dato obsoleto + historial incompleto). Usar `releaseSpotSimple`/`releaseSpot`. | `checkout.service.ts:322-327` |
+| H7 ✅ | **RESUELTO (E1)**. Decisión de negocio: al superar la gracia se **cobra completo**; se corrigió el `billableMinutes`/`graceAppliedMinutes` del desglose para que reflejen la realidad. | `pricing-engine.service.ts` |
+| H8 ✅ | **RESUELTO (E2)**. El `dailyMax` se aplica **por cada día calendario**, no una vez por estancia. | `pricing-engine.service.ts` |
+| H9 ✅ | **RESUELTO (E3)**. `findApplicableRule` exige `tariffPlan.isActive = true`; las reglas de planes desactivados dejan de cobrar. | `pricing-engine.service.ts` |
+| H10 ✅ | **RESUELTO (E4)**. Se **eliminó la multa** de tiquete perdido del checkout (decisión: se reimprime gratis y se cobra la estancia normal). `PricingConfig.lostTicketFee` queda sin efecto en el cobro. | `checkout.service.ts` |
+| H11 | `checkout.confirm` libera el puesto **sin limpiar `sessionId` ni escribir `spot_status_history`** (dato obsoleto + historial incompleto). Usar `releaseSpotSimple`/`releaseSpot`. → Sprint F (F6). | `checkout.service.ts` |
 | H12 ✅ | **RESUELTO (D3)**. `findActiveByPlate` filtra por empresa e itera los vehículos hallados (ya no deja `vehicleId` en `undefined`). | `parking-sessions.service.ts` |
-| H13 | `requireOpenShiftForCheckout` también bloquea el **check-in** (nombre engañoso; ¿es la regla deseada?). | `parking-sessions.service.ts:90-109` |
+| H13 ✅ | **RESUELTO (E6)**. Flags separados `requireOpenShiftForCheckIn` / `...Checkout` (ambos `true` por defecto); el check-in usa el suyo. | `cash-policy.entity.ts`, `parking-sessions.service.ts` |
 | H14 | Columnas `timestamp` sin zona horaria + `plan.timezone` ignorado: el cobro depende de la TZ del servidor. Migrar a `timestamptz`. | entidades / motor |
 | H15 ✅ | **RESUELTO (D7)**. El `HttpExceptionFilter` global traduce `QueryFailedError` de Postgres (23505→409, 23503→409, 22P02→400, 23502→400); `ParseUUIDPipe` añadido en los `:id` de facturas del checkout. | `common/filters/http-exception.filter.ts`, `checkout.controller.ts` |
 | H16 | Frontend: URLs **hardcodeadas a `localhost:3002`** en pricing, simulador y `LiveQuote` (ignoran `NEXT_PUBLIC_API_URL`); CORS del backend hardcodeado a 3000/3003/3005 (ignora `CORS_ORIGIN`). | `apps/web/.../pricing/*.tsx`, `LiveQuote.tsx`, `apps/api/src/main.ts:22` |

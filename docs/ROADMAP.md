@@ -100,20 +100,25 @@ empresas. Todo es corrección de código sin decisiones de negocio pendientes.
 
 ---
 
-## Sprint E — Reglas de negocio del motor (requieren decisión del producto)
+## Sprint E — Reglas de negocio del motor ✅ COMPLETADO
 
-Cada ítem tiene una **decisión previa** que tomar; el código hoy decide implícitamente.
-Recomendación marcada con ⭐.
+> **Estado: COMPLETADO (2026-07-15)** en la rama `sprint-e-reglas-negocio`.
+> Decisiones tomadas por el usuario; build api+web OK, tests 34/34.
+> (E7 ya se había resuelto en el Sprint D junto con H12.)
 
-| Ítem | Comportamiento actual | Opciones |
+| Ítem | Decisión aplicada | Dónde |
 |---|---|---|
-| E1. Gracia (H7) | ≤15 min sale gratis; al minuto 16 se cobra TODO | (a) ⭐ dejarlo así (estándar del sector) y corregir el `billableMinutes` engañoso del breakdown; (b) descontar la gracia siempre |
-| E2. Tope diario (H8) | `dailyMax` capa toda la estancia una vez | ⭐ aplicarlo **por cada 24 h** (estancia de 3 días = 3 topes) |
-| E3. Planes tarifarios (H9) | El motor ignora si el plan está activo; reglas viejas siguen cobrando | ⭐ `findApplicableRule` debe hacer join con `tariff_plans.is_active = true`; `activateTariffPlan` ya desactiva los otros planes |
-| E4. Tiquete perdido (H10) | Checkout cobra `max($5.000, 20%)`; ignora `config.lostTicketFee` ($20.000) | ⭐ usar siempre `PricingConfig.lostTicketFee`; eliminar la fórmula hardcodeada del checkout |
-| E5. Anulaciones | `VOIDED` no reabre sesión, no ajusta caja, `Refund` sin uso | Definir semántica: ⭐ anulación con turno abierto genera `CashMovement EXPENSE` automático (devolución); implementar `Refund` si se quiere devolución formal; documentar que la sesión no se reabre |
-| E6. Política de caja en check-in (H13) | `requireOpenShiftForCheckout` también bloquea el check-in | (a) ⭐ separar en dos flags (`requireOpenShiftForCheckIn` / `ForCheckout`); (b) renombrar y documentar |
-| E7. Búsqueda por placa (H12) | `findActiveByPlate` sin filtro de empresa; con placas duplicadas devuelve cualquier sesión | Filtrar por `companyId` + iterar los vehículos encontrados |
+| E1. Gracia (H7) ✅ | Se **cobra la estancia completa** al superar los 15 min (estándar del sector); se corrigió el `billableMinutes`/`graceAppliedMinutes` del desglose para que no engañen. | `pricing-engine.service.ts` |
+| E2. Tope diario (H8) ✅ | El `dailyMax` se aplica **por cada día calendario** (los segmentos ya se cortan a medianoche); una estancia multi-día ya no queda casi gratis. | `pricing-engine.service.ts` |
+| E3. Planes tarifarios (H9) ✅ | `findApplicableRule` hace `innerJoin` con `tariffPlan` y exige `plan.isActive = true`: las reglas de planes desactivados dejan de cobrar. | `pricing-engine.service.ts` |
+| E4. Tiquete perdido (H10) ✅ | **Eliminada la multa** por completo: si el cliente pierde el tiquete se reimprime gratis (búsqueda por placa, ya existente) y se cobra la estancia normal. Se quitó el campo `lostTicket` del DTO/servicio y el toggle de la UI. | `checkout.service.ts`, `checkout.dto.ts`, `ops/checkout/page.tsx` |
+| E5. Anulaciones ✅ | Anular un pago con turno **abierto** genera un `CashMovement EXPENSE` automático por la **porción en efectivo** (devolución del cajón); tarjeta/transferencia/QR no lo afectan; la sesión **no** se reabre. Auditado. | `payments.service.ts` |
+| E6. Política de caja (H13) ✅ | Separado en dos flags: `requireOpenShiftForCheckIn` y `requireOpenShiftForCheckout`, ambos `true` por defecto (migración `1768900000000`). El check-in usa su propio flag. | `cash-policy.entity.ts`, `parking-sessions.service.ts`, migración |
+| E7. Búsqueda por placa (H12) ✅ | *(Ya resuelto en Sprint D.)* | — |
+
+> **Nota sobre `PricingConfig.lostTicketFee`**: con E4 el checkout ya no aplica ninguna multa,
+> por lo que ese campo de configuración queda **sin efecto en el cobro** (solo lo usa el
+> simulador como escenario "qué pasaría si"). Se puede retirar en un futuro sprint de limpieza.
 
 ---
 

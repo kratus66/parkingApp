@@ -8,7 +8,7 @@ Sistema SaaS de gestión de parqueaderos. Monorepo npm workspaces:
 | Doc | Rol |
 |---|---|
 | `docs/BUSINESS_LOGIC.md` | **Canónico**: lógica de negocio end-to-end, RBAC, motor de tarifas, caja, invariantes, hallazgos **H1–H16** (referirse a ellos por código, p. ej. "fix H4") |
-| `docs/ROADMAP.md` | Plan priorizado: **Sprint D ✅ COMPLETADO** (D1–D7), **Sprint E** (decisiones de negocio E1–E7, pendiente), **Sprint F** (endurecimiento F1–F9, pendiente) |
+| `docs/ROADMAP.md` | Plan priorizado: **Sprint D ✅** (D1–D7), **Sprint E ✅** (E1–E7), **Sprint F** (endurecimiento F1–F9, pendiente) |
 | `docs/ARCHITECTURE.md` | Módulos (23), entidades, seguridad, envs |
 | `SPRINT_*.md` (raíz) | Bitácora histórica. Sprints A (flujo operativo), B (convenios) y C (facturación DIAN) COMPLETADOS. Ante conflicto manda BUSINESS_LOGIC.md |
 
@@ -40,6 +40,10 @@ cd apps/web && npx next dev -p 3003                                         # We
   `POST /parking-sessions/:id/check-out` ya **fue eliminado** en Sprint D (H1).
 - El precio SIEMPRE lo calcula el servidor en el confirm (motor de tarifas + convenio) y
   queda congelado en `PricingSnapshot`. Los medios de pago deben sumar exacto el total.
+  Reglas del motor (Sprint E): al superar la gracia se cobra completo; tope diario por día;
+  solo cuentan reglas de planes activos; **no hay multa por tiquete perdido** (se reimprime
+  gratis por placa). Anular un pago con turno abierto genera un egreso de caja por la porción
+  en efectivo. La caja abierta se exige para check-in y checkout (flags separados).
 - Precio **incluye IVA 19 %**; `FiscalService` extrae base/IVA y calcula CUFE; numeración de
   factura por `BillingResolution` (lock pesimista) con fallback `INV-########`.
 - Todo se scopea por `companyId` del JWT (excepciones conocidas = H4, pendientes de fix).

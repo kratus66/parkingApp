@@ -46,16 +46,14 @@ export class PricingEngineService {
     let billableMinutes = totalMinutes;
     let graceAppliedMinutes = 0;
 
-    if (applyGrace && graceMinutes > 0) {
-      if (totalMinutes <= graceMinutes) {
-        // Dentro del período de gracia: cobro mínimo o cero
-        billableMinutes = 0;
-        graceAppliedMinutes = totalMinutes;
-      } else {
-        // Reduce billable por grace
-        billableMinutes = totalMinutes - graceMinutes;
-        graceAppliedMinutes = graceMinutes;
-      }
+    if (applyGrace && graceMinutes > 0 && totalMinutes <= graceMinutes) {
+      // (E1/H7) Dentro del período de gracia: salida gratis.
+      // Al SUPERARLA se cobra la estancia completa (regla de negocio confirmada),
+      // por eso billableMinutes = totalMinutes y no se descuenta la gracia. Antes
+      // se reportaba billableMinutes = total - gracia, un desglose engañoso porque
+      // el cobro real usa los segmentos completos.
+      billableMinutes = 0;
+      graceAppliedMinutes = totalMinutes;
     }
 
     // Si estamos dentro del grace period completo, retornar cero
@@ -95,26 +93,36 @@ export class PricingEngineService {
       );
     }
 
-    // 6. Calcular subtotales
-    let subtotal = 0;
+    // 6. Calcular subtotales y agrupar por día calendario (para el tope diario)
     const ruleIdsUsed: string[] = [];
+    const subtotalByDay = new Map<string, number>();
 
     for (const segment of segments) {
-      subtotal += segment.subtotal;
+      // Los segmentos nunca cruzan medianoche (getSegmentEnd corta a las 00:00),
+      // así que la fecha del inicio identifica el día calendario del segmento.
+      const dayKey = this.formatDate(segment.from);
+      subtotalByDay.set(dayKey, (subtotalByDay.get(dayKey) || 0) + segment.subtotal);
       if (!ruleIdsUsed.includes(segment.ruleId)) {
         ruleIdsUsed.push(segment.ruleId);
       }
     }
 
-    // 7. Aplicar daily max
+    // 7. Aplicar daily max POR CADA DÍA (E2/H8). Antes se topaba toda la estancia
+    // una sola vez, dejando estancias multi-día casi gratis.
     let dailyMaxApplied = false;
     let dailyMaxAmount: number | undefined;
     const applyDailyMax = input.options?.applyDailyMax !== false;
+    const dailyMax = config?.defaultDailyMax;
 
-    if (applyDailyMax && config?.defaultDailyMax && subtotal > config.defaultDailyMax) {
-      dailyMaxAmount = config.defaultDailyMax;
-      subtotal = config.defaultDailyMax;
-      dailyMaxApplied = true;
+    let subtotal = 0;
+    for (const dayTotal of subtotalByDay.values()) {
+      if (applyDailyMax && dailyMax && dayTotal > dailyMax) {
+        subtotal += dailyMax;
+        dailyMaxApplied = true;
+        dailyMaxAmount = dailyMax;
+      } else {
+        subtotal += dayTotal;
+      }
     }
 
     // 8. Aplicar lost ticket fee
@@ -259,16 +267,20 @@ export class PricingEngineService {
     dayType: DayType,
     period: PeriodType,
   ): Promise<TariffRule | null> {
-    return this.tariffRuleRepository.findOne({
-      where: {
-        parkingLotId,
-        companyId,
-        vehicleType,
-        dayType,
-        period,
-        isActive: true,
-      },
-    });
+    // (E3/H9) La regla debe pertenecer a un plan ACTIVO. Antes se tomaba cualquier
+    // regla activa, así que reglas de planes desactivados seguían cobrando y activar
+    // un plan nuevo no dejaba de aplicar el anterior.
+    return this.tariffRuleRepository
+      .createQueryBuilder('rule')
+      .innerJoinAndSelect('rule.tariffPlan', 'plan')
+      .where('rule.parkingLotId = :parkingLotId', { parkingLotId })
+      .andWhere('rule.companyId = :companyId', { companyId })
+      .andWhere('rule.vehicleType = :vehicleType', { vehicleType })
+      .andWhere('rule.dayType = :dayType', { dayType })
+      .andWhere('rule.period = :period', { period })
+      .andWhere('rule.isActive = true')
+      .andWhere('plan.isActive = true')
+      .getOne();
   }
 
   private calculateUnits(minutes: number, billingUnit: BillingUnit, rounding: RoundingType): number {

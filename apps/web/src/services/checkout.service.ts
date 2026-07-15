@@ -15,13 +15,12 @@ export const checkoutApi = {
    */
   async preview(
     sessionId: string,
-    lostTicket = false,
     agreementId?: string,
   ): Promise<CheckoutPreview> {
     const token = localStorage.getItem('token');
     const response = await axios.post(
       `${API_URL}/checkout/preview`,
-      { sessionId, lostTicket, ...(agreementId ? { agreementId } : {}) },
+      { sessionId, ...(agreementId ? { agreementId } : {}) },
       {
         headers: { Authorization: `Bearer ${token}` },
       },
@@ -36,13 +35,12 @@ export const checkoutApi = {
   async confirm(
     sessionId: string,
     paymentItems: PaymentItem[],
-    lostTicket = false,
     agreementId?: string,
   ): Promise<CheckoutConfirmResponse> {
     const token = localStorage.getItem('token');
     const response = await axios.post(
       `${API_URL}/checkout/confirm`,
-      { sessionId, paymentItems, lostTicket, ...(agreementId ? { agreementId } : {}) },
+      { sessionId, paymentItems, ...(agreementId ? { agreementId } : {}) },
       {
         headers: { Authorization: `Bearer ${token}` },
       },

@@ -92,20 +92,17 @@ export class CheckoutService {
 
     const baseTotal = quote.total;
 
-    // Aplicar cargo por ticket perdido (ejemplo: 20% adicional o mínimo 5000 COP)
-    const lostTicketFee = dto.lostTicket
-      ? Math.max(5000, Math.round(baseTotal * 0.2))
-      : 0;
+    // (E4/H10) No hay multa por tiquete perdido: si el cliente pierde el tiquete se
+    // reimprime gratis (búsqueda por placa) y se cobra la estancia normal.
 
     // Resolver convenio: el indicado explícitamente o el del cliente
     const agreement = await this.agreementsService.resolve(
       dto.agreementId ?? session.customer?.agreementId,
       companyId,
     );
-    // El descuento aplica sobre el servicio de parqueo (no sobre la multa)
     const discount = this.agreementsService.computeDiscount(agreement, baseTotal, exitAt);
 
-    const grossTotal = baseTotal + lostTicketFee;
+    const grossTotal = baseTotal;
     const total = grossTotal - discount;
 
     // Desglose de IVA (el total ya incluye IVA 19%)
@@ -210,11 +207,8 @@ export class CheckoutService {
 
       const baseTotal = quote.total;
 
-      const lostTicketFee = dto.lostTicket
-        ? Math.max(5000, Math.round(baseTotal * 0.2))
-        : 0;
-
-      // Resolver convenio y calcular descuento (sobre el servicio, no la multa)
+      // (E4/H10) Sin multa por tiquete perdido (ver preview).
+      // Resolver convenio y calcular descuento sobre el servicio.
       const agreement = await this.agreementsService.resolve(
         dto.agreementId ?? session.customer?.agreementId,
         companyId,
@@ -225,7 +219,7 @@ export class CheckoutService {
         exitAt,
       );
 
-      const grossTotal = baseTotal + lostTicketFee;
+      const grossTotal = baseTotal;
       const total = grossTotal - discount;
 
       // 3. Validar suma de pagos

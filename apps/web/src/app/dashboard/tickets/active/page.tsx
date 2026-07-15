@@ -116,7 +116,7 @@ export default function ActiveTicketsPage() {
       setCheckoutError(null);
 
       // Paso 1: Obtener preview del checkout
-      const previewData = await checkoutApi.preview(sessionId, false);
+      const previewData = await checkoutApi.preview(sessionId);
       
       // Paso 2: Mostrar los datos al usuario y solicitar información de pago
       // NOTA (Sprint A): manejo defensivo por doble envoltura { data, meta }.

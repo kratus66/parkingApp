@@ -11,6 +11,14 @@ export class UpdatePolicyDto {
   requireOpenShiftForCheckout?: boolean;
 
   @ApiPropertyOptional({
+    description: 'Exigir turno abierto para registrar entradas (check-in)',
+    example: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  requireOpenShiftForCheckIn?: boolean;
+
+  @ApiPropertyOptional({
     description: 'Duración default del turno en horas',
     example: 8,
     minimum: 1,
