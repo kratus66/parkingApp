@@ -13,10 +13,6 @@ export interface CheckInRequest {
   notes?: string;
 }
 
-export interface CheckOutRequest {
-  sessionId: string;
-}
-
 export interface CancelSessionRequest {
   sessionId: string;
   reason: string;
@@ -36,13 +32,8 @@ export const sessionService = {
     return response.data;
   },
 
-  /**
-   * Registrar salida de vehículo (Check-Out)
-   */
-  async checkOut(sessionId: string) {
-    const response = await api.post(`/parking-sessions/${sessionId}/check-out`);
-    return response.data;
-  },
+  // checkOut eliminado (Sprint D / H1): la salida con cobro se hace por el flujo
+  // /checkout (preview + confirm), no por parking-sessions. Ver services/checkout.service.ts.
 
   /**
    * Buscar sesión activa por placa

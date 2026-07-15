@@ -7,7 +7,7 @@ import { VehiclesV2Module } from '../vehicles-v2/vehicles-v2.module';
 import { ParkingSession } from '../../entities/parking-session.entity';
 import { ParkingSpot } from '../../entities/parking-spot.entity';
 import { ParkingZone } from '../../entities/parking-zone.entity';
-import { Ticket } from '../../entities/ticket.entity';
+import { Payment } from '../../entities/payment.entity';
 
 @Module({
   imports: [
@@ -15,7 +15,7 @@ import { Ticket } from '../../entities/ticket.entity';
       ParkingSession,
       ParkingSpot,
       ParkingZone,
-      Ticket,
+      Payment,
     ]),
     CustomersModule,
     VehiclesV2Module,

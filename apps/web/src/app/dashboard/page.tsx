@@ -6,7 +6,6 @@ import { GaugeMeter } from '@/components/GaugeMeter';
 import { VehicleCard } from '@/components/VehicleCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CheckInModal } from '@/components/modals/CheckInModal';
-import { CheckOutModal } from '@/components/modals/CheckOutModal';
 import { useDashboardData } from '@/lib/useDashboardData';
 import { LogOut, Wallet, AlertCircle } from 'lucide-react';
 import { shiftsApi } from '@/services/shifts.service';
@@ -23,7 +22,6 @@ export default function DashboardPage() {
   
   // Estados para modales
   const [showCheckInModal, setShowCheckInModal] = useState(false);
-  const [showCheckOutModal, setShowCheckOutModal] = useState(false);
   
   // Estados para verificación de turno de caja
   const [currentShift, setCurrentShift] = useState<CashShift | null>(null);
@@ -198,15 +196,15 @@ export default function DashboardPage() {
                 <CardTitle>Registro de Salida</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col items-center justify-center py-8">
-                <button
-                  onClick={() => setShowCheckOutModal(true)}
+                <Link
+                  href="/ops/checkout"
                   className="w-full px-6 py-4 bg-destructive hover:bg-destructive/90 text-destructive-foreground text-lg font-semibold rounded-lg shadow-lg transition-colors flex items-center justify-center gap-2"
                 >
                   <LogOut className="w-5 h-5" />
                   Registrar Salida
-                </button>
+                </Link>
                 <p className="text-sm text-muted-foreground mt-4 text-center">
-                  Registra la salida de un vehículo del parqueadero
+                  Cobro con motor de tarifas, factura y caja
                 </p>
               </CardContent>
             </Card>
@@ -245,13 +243,6 @@ export default function DashboardPage() {
         <CheckInModal
           isOpen={showCheckInModal}
           onClose={() => setShowCheckInModal(false)}
-          onSuccess={handleOperationSuccess}
-          parkingLotId={parkingLotIdValue}
-        />
-
-        <CheckOutModal
-          isOpen={showCheckOutModal}
-          onClose={() => setShowCheckOutModal(false)}
           onSuccess={handleOperationSuccess}
           parkingLotId={parkingLotIdValue}
         />

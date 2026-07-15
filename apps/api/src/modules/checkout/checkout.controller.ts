@@ -10,6 +10,7 @@ import {
   HttpCode,
   HttpStatus,
   Res,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -102,7 +103,7 @@ export class CheckoutController {
   @ApiOperation({ summary: 'Obtener factura por ID' })
   @ApiResponse({ status: 200, description: 'Factura encontrada' })
   @ApiResponse({ status: 404, description: 'Factura no encontrada' })
-  async getInvoice(@Param('id') id: string, @Req() req: any) {
+  async getInvoice(@Param('id', ParseUUIDPipe) id: string, @Req() req: any) {
     const { companyId } = req.user;
     return await this.invoiceService.findOne(id, companyId);
   }
@@ -117,7 +118,7 @@ export class CheckoutController {
   @ApiResponse({ status: 400, description: 'Motivo obligatorio' })
   @ApiResponse({ status: 404, description: 'Factura no encontrada' })
   async voidInvoice(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: VoidReasonDto,
     @Req() req: any,
   ) {
@@ -133,8 +134,9 @@ export class CheckoutController {
   })
   @ApiResponse({ status: 200, description: 'HTML generado', schema: { type: 'string' } })
   @ApiResponse({ status: 404, description: 'Factura no encontrada' })
-  async getInvoiceHtml(@Param('id') id: string, @Res() res: Response) {
-    const html = await this.invoiceService.generateInvoiceHtml(id);
+  async getInvoiceHtml(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Res() res: Response) {
+    const { companyId } = req.user;
+    const html = await this.invoiceService.generateInvoiceHtml(id, companyId);
     res.setHeader('Content-Type', 'text/html');
     res.send(html);
   }
@@ -147,7 +149,7 @@ export class CheckoutController {
     description: 'Registra en AuditLog la impresión de una factura',
   })
   @ApiResponse({ status: 200, description: 'Impresión registrada' })
-  async logPrint(@Param('id') id: string, @Req() req: any) {
+  async logPrint(@Param('id', ParseUUIDPipe) id: string, @Req() req: any) {
     const { companyId, id: userId } = req.user;
     return await this.invoiceService.logPrint(id, companyId, userId);
   }

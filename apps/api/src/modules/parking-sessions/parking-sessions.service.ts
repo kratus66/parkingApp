@@ -112,30 +112,35 @@ export class ParkingSessionsService {
       let availableSpot;
       
       if (checkInDto.parkingSpotId) {
-        // Si se proporciona un parkingSpotId, validar que esté disponible
-        const requestedSpot = await this.occupancyService.findSpotById(checkInDto.parkingSpotId);
-        
+        // (H6/Sprint D) Validar el puesto solicitado con lock pesimista dentro de la
+        // transacción, para que dos entradas concurrentes no tomen el mismo puesto.
+        const requestedSpot = await this.occupancyService.findSpotByIdLocked(
+          checkInDto.parkingSpotId,
+          queryRunner,
+        );
+
         if (!requestedSpot) {
           throw new BadRequestException('El puesto de estacionamiento especificado no existe');
         }
-        
+
         if (requestedSpot.status !== 'FREE') {
           throw new BadRequestException(`El puesto ${requestedSpot.code} no está disponible`);
         }
-        
+
         // Validar que el tipo de puesto coincide con el tipo de vehículo
         if (requestedSpot.spotType !== vehicle.vehicleType) {
           throw new BadRequestException(
             `El puesto ${requestedSpot.code} es para vehículos tipo ${requestedSpot.spotType}, no ${vehicle.vehicleType}`
           );
         }
-        
+
         availableSpot = requestedSpot;
       } else {
-        // Si no se proporciona, buscar un espacio disponible automáticamente
-        availableSpot = await this.occupancyService.findAvailableSpot(
+        // (H6/Sprint D) Asignación automática con lock pesimista dentro de la transacción.
+        availableSpot = await this.occupancyService.findAvailableSpotLocked(
           checkInDto.parkingLotId,
           vehicle.vehicleType,
+          queryRunner,
         );
 
         if (!availableSpot) {
@@ -453,138 +458,10 @@ export class ParkingSessionsService {
     }
   }
 
-  async checkOut(sessionId: string, operator: User) {
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
-    try {
-      const session = await queryRunner.manager.findOne(ParkingSession, {
-        where: { id: sessionId },
-        relations: ['vehicle', 'spot', 'spot.zone'],
-      });
-
-      if (!session) {
-        throw new NotFoundException('Sesión no encontrada');
-      }
-
-      if (session.status !== ParkingSessionStatus.ACTIVE) {
-        throw new BadRequestException('La sesión no está activa');
-      }
-
-      // Obtener datos del vehículo y cliente
-      const vehicle = session.vehicle || await queryRunner.manager.findOne(Vehicle, {
-        where: { id: session.vehicleId },
-      });
-
-      const customer = vehicle ? await queryRunner.manager.findOne(Customer, {
-        where: { id: vehicle.customerId },
-      }) : null;
-
-      const parkingLot = await queryRunner.manager.findOne(ParkingLot, {
-        where: { id: session.parkingLotId },
-      });
-
-      // Calcular tiempo y costo
-      const exitAt = new Date();
-      const entryAt = new Date(session.entryAt);
-      const durationMillis = exitAt.getTime() - entryAt.getTime();
-      const durationMinutes = Math.floor(durationMillis / 60000);
-      const durationHours = Math.ceil(durationMinutes / 60); // Redondear hacia arriba
-
-      // Tarifas por tipo de vehículo (por hora)
-      const rates = {
-        CAR: 3000, // $3,000 por hora
-        MOTORCYCLE: 2000, // $2,000 por hora
-        BICYCLE: 1000, // $1,000 por hora
-        TRUCK_BUS: 5000, // $5,000 por hora
-      };
-
-      const ratePerHour = rates[(vehicle?.vehicleType) as keyof typeof rates] || rates.CAR;
-      const totalAmount = durationHours * ratePerHour;
-
-      // Actualizar sesión
-      session.status = ParkingSessionStatus.CLOSED;
-      session.exitAt = exitAt;
-      session.closedByUserId = operator.id;
-
-      const updatedSession = await queryRunner.manager.save(session);
-
-      // Liberar el espacio - usar releaseSpotSimple con queryRunner
-      if (session.spotId) {
-        await this.occupancyService.releaseSpotSimple(session.spotId, queryRunner);
-      }
-
-      await queryRunner.commitTransaction();
-
-      // Registrar en AuditLog
-      await this.auditService.log({
-        action: 'CHECK_OUT',
-        entityType: 'ParkingSession',
-        entityId: session.id,
-        userId: operator.id,
-        companyId: operator.companyId,
-        metadata: {
-          ticketNumber: session.ticketNumber,
-          entryAt: session.entryAt,
-          exitAt: exitAt,
-          durationMinutes,
-          totalAmount,
-          vehicleId: vehicle?.id,
-          spotId: session.spotId,
-        },
-      });
-
-      // Retornar datos completos para el ticket de pago
-      return {
-        session: updatedSession,
-        receipt: {
-          ticketNumber: session.ticketNumber,
-          entryAt: session.entryAt,
-          exitAt: exitAt,
-          duration: {
-            minutes: durationMinutes,
-            hours: durationHours,
-            formatted: `${Math.floor(durationMinutes / 60)}h ${durationMinutes % 60}m`,
-          },
-          amount: {
-            ratePerHour,
-            totalHours: durationHours,
-            totalAmount,
-            formattedAmount: `$${totalAmount.toLocaleString('es-CO')}`,
-          },
-          spot: session.spot ? {
-            code: session.spot.code,
-            type: session.spot.spotType,
-            zone: {
-              name: session.spot.zone?.name || 'Sin zona',
-            },
-          } : null,
-          vehicle: vehicle ? {
-            type: vehicle.vehicleType,
-            licensePlate: vehicle.plate,
-            bicycleCode: vehicle.bicycleCode,
-            brand: vehicle.brand,
-            model: vehicle.model,
-          } : null,
-          customer: customer ? {
-            fullName: customer.fullName,
-            documentType: customer.documentType,
-            documentNumber: customer.documentNumber,
-          } : null,
-          parkingLot: parkingLot ? {
-            name: parkingLot.name,
-            address: parkingLot.address,
-          } : null,
-        },
-      };
-    } catch (error) {
-      await queryRunner.rollbackTransaction();
-      throw error;
-    } finally {
-      await queryRunner.release();
-    }
-  }
+  // NOTA (Sprint D / H1): el método `checkOut` legacy fue eliminado. Cobraba con
+  // tarifas fijas en código (CAR 3000, MOTORCYCLE 2000, BICYCLE 1000, TRUCK_BUS 5000),
+  // sin motor de tarifas, sin gracia/convenios, sin IVA/factura, sin Payment y sin caja.
+  // La salida con cobro se realiza exclusivamente por CheckoutService (preview/confirm).
 
   /**
    * Obtener todas las sesiones activas de un parqueadero
@@ -608,11 +485,16 @@ export class ParkingSessionsService {
   /**
    * Buscar sesión activa por placa de vehículo
    */
-  async findActiveByPlate(parkingLotId: string, plate: string): Promise<ParkingSession | null> {
-    // Buscar el vehículo por placa
+  async findActiveByPlate(
+    parkingLotId: string,
+    plate: string,
+    companyId: string,
+  ): Promise<ParkingSession | null> {
+    // (H4/H12/Sprint D) Buscar el vehículo por placa dentro de la empresa.
     const vehicles = await this.dataSource.manager
       .createQueryBuilder(Vehicle, 'vehicle')
-      .where('UPPER(REPLACE(REPLACE(vehicle.plate, \' \', \'\'), \'-\', \'\')) = :plate', {
+      .where('vehicle.company_id = :companyId', { companyId })
+      .andWhere('UPPER(REPLACE(REPLACE(vehicle.plate, \' \', \'\'), \'-\', \'\')) = :plate', {
         plate: plate.toUpperCase().replace(/[\s\-]/g, ''),
       })
       .getMany();
@@ -621,22 +503,29 @@ export class ParkingSessionsService {
       return null;
     }
 
-    // Buscar sesión activa para alguno de esos vehículos
-    const session = await this.parkingSessionsRepository.findOne({
-      where: {
-        vehicleId: vehicles.length === 1 ? vehicles[0].id : undefined,
-        parkingLotId,
-        status: ParkingSessionStatus.ACTIVE,
-      },
-      relations: ['vehicle', 'vehicle.customer', 'spot', 'spot.zone'],
-    });
+    // Buscar sesión activa para cualquiera de esos vehículos (sin depender de que
+    // la placa sea única): se prueba vehículo por vehículo en vez de dejar vehicleId
+    // en undefined (que devolvía cualquier sesión activa del lote).
+    for (const vehicle of vehicles) {
+      const session = await this.parkingSessionsRepository.findOne({
+        where: {
+          vehicleId: vehicle.id,
+          parkingLotId,
+          companyId,
+          status: ParkingSessionStatus.ACTIVE,
+        },
+        relations: ['vehicle', 'vehicle.customer', 'spot', 'spot.zone'],
+      });
+      if (session) return session;
+    }
 
-    return session;
+    return null;
   }
 
-  async findByTicketNumber(ticketNumber: string) {
+  async findByTicketNumber(ticketNumber: string, companyId: string) {
+    // (H4/Sprint D) Scoping por empresa.
     return this.parkingSessionsRepository.findOne({
-      where: { ticketNumber },
+      where: { ticketNumber, companyId },
       relations: ['vehicle', 'vehicle.customer', 'spot', 'spot.zone', 'parkingLot'],
     });
   }
@@ -718,8 +607,12 @@ export class ParkingSessionsService {
   ): Promise<string> {
     const manager = queryRunner ? queryRunner.manager : this.dataSource.manager;
 
+    // (H6/Sprint D) Lock pesimista sobre la fila del contador para serializar los
+    // incrementos concurrentes (evita números de ticket duplicados). Solo aplicable
+    // dentro de la transacción del check-in (queryRunner presente).
     let counter = await manager.findOne(ParkingLotCounter, {
       where: { parkingLotId },
+      lock: queryRunner ? { mode: 'pessimistic_write' } : undefined,
     });
 
     if (!counter) {

@@ -5,6 +5,7 @@ import { CashMovement } from '../../entities/cash-movement.entity';
 import { CashCount } from '../../entities/cash-count.entity';
 import { CashPolicy } from '../../entities/cash-policy.entity';
 import { Payment } from '../../entities/payment.entity';
+import { PaymentItem } from '../../entities/payment-item.entity';
 import { AuditLog } from '../audit/entities/audit-log.entity';
 import { ShiftsService } from './services/shifts.service';
 import { MovementsService } from './services/movements.service';
@@ -23,6 +24,7 @@ import { PolicyController } from './controllers/policy.controller';
       CashCount,
       CashPolicy,
       Payment,
+      PaymentItem,
       AuditLog,
     ]),
   ],

@@ -12,7 +12,7 @@ import { CashPolicy } from '../../../entities/cash-policy.entity';
 import { CashMovement, CashMovementType } from '../../../entities/cash-movement.entity';
 import { CashCount } from '../../../entities/cash-count.entity';
 import { Payment, PaymentStatus } from '../../../entities/payment.entity';
-import { PaymentItem } from '../../../entities/payment-item.entity';
+import { PaymentItem, PaymentMethod } from '../../../entities/payment-item.entity';
 import { AuditLog } from '../../audit/entities/audit-log.entity';
 import { AuditAction } from '../../audit/enums/audit-action.enum';
 import { OpenShiftDto, CloseShiftDto } from '../dto/shift.dto';
@@ -30,6 +30,8 @@ export class ShiftsService {
     private countsRepo: Repository<CashCount>,
     @InjectRepository(Payment)
     private paymentsRepo: Repository<Payment>,
+    @InjectRepository(PaymentItem)
+    private paymentItemsRepo: Repository<PaymentItem>,
     @InjectRepository(AuditLog)
     private auditRepo: Repository<AuditLog>,
   ) {}
@@ -160,23 +162,35 @@ export class ShiftsService {
       throw new ForbiddenException('Solo el cajero puede cerrar su propio turno');
     }
 
-    // Calculate expected total
-    const expectedTotal = await this.calculateExpectedTotal(shiftId);
+    // (H5/Sprint D) Esperado POR MÉTODO: el efectivo esperado en el cajón NO incluye
+    // pagos con tarjeta/transferencia/QR. Cada método se concilia contra su propio arqueo.
+    const expectedByMethod = await this.computeExpectedByMethod(shiftId);
+    const expectedTotal = Object.values(expectedByMethod).reduce((s, v) => s + v, 0);
 
-    // Calculate counted total from cash counts
+    // Arqueos registrados (una fila por método contado)
     const counts = await this.countsRepo.find({
       where: { cashShiftId: shiftId },
     });
 
     const countedTotal = counts.reduce((sum, count) => sum + count.countedAmount, 0);
-    const difference = countedTotal > 0 ? countedTotal - expectedTotal : null;
+
+    // La diferencia se calcula SOLO sobre los métodos efectivamente arqueados,
+    // comparando cada método contra su esperado (evita falsos faltantes cuando el
+    // cajero solo cuenta el efectivo del cajón).
+    const difference =
+      counts.length > 0
+        ? counts.reduce(
+            (sum, c) => sum + (c.countedAmount - (expectedByMethod[c.method] ?? 0)),
+            0,
+          )
+        : null;
 
     // Update shift
     shift.status = CashShiftStatus.CLOSED;
     shift.closedAt = new Date();
     shift.closingNotes = dto.closingNotes || null;
     shift.expectedTotal = expectedTotal;
-    shift.countedTotal = countedTotal > 0 ? countedTotal : null;
+    shift.countedTotal = counts.length > 0 ? countedTotal : null;
     shift.difference = difference;
 
     const updated = await this.shiftsRepo.save(shift);
@@ -197,44 +211,63 @@ export class ShiftsService {
     return updated;
   }
 
-  private async calculateExpectedTotal(shiftId: string): Promise<number> {
+  /**
+   * (H5/Sprint D) Calcula el monto esperado POR MÉTODO de pago al cierre del turno.
+   *
+   * - CASH: base inicial + Σ items en efectivo (monto cobrado, el cambio ya está
+   *   descontado porque `amount` es lo cobrado) + ingresos − egresos de caja.
+   * - CARD/TRANSFER/QR/OTHER: Σ de los items de ese método (no tocan el cajón físico).
+   *
+   * Solo cuenta pagos PAID del turno (los anulados quedan fuera).
+   */
+  private async computeExpectedByMethod(
+    shiftId: string,
+  ): Promise<Record<string, number>> {
     const shift = await this.shiftsRepo.findOne({ where: { id: shiftId } });
-    if (!shift) return 0;
 
-    // Opening float
-    let total = shift.openingFloat;
+    const expected: Record<string, number> = {
+      [PaymentMethod.CASH]: 0,
+      [PaymentMethod.CARD]: 0,
+      [PaymentMethod.TRANSFER]: 0,
+      [PaymentMethod.QR]: 0,
+      [PaymentMethod.OTHER]: 0,
+    };
 
-    // Add payments (PAID, not VOIDED)
-    const payments = await this.paymentsRepo.find({
-      where: {
-        cashShiftId: shiftId,
-        status: PaymentStatus.PAID,
-      },
-    });
+    if (!shift) return expected;
 
-    total += payments.reduce((sum, p) => sum + p.totalAmount, 0);
+    // Base inicial de efectivo
+    expected[PaymentMethod.CASH] += shift.openingFloat;
 
-    // Add income movements
+    // Items de pago (PAID) del turno, agrupados por método
+    const items = await this.paymentItemsRepo
+      .createQueryBuilder('item')
+      .select('item.method', 'method')
+      .addSelect('SUM(item.amount)', 'total')
+      .innerJoin('item.payment', 'payment')
+      .where('payment.cashShiftId = :shiftId', { shiftId })
+      .andWhere('payment.status = :status', { status: PaymentStatus.PAID })
+      .groupBy('item.method')
+      .getRawMany();
+
+    for (const row of items) {
+      const method = row.method as PaymentMethod;
+      if (method in expected) {
+        expected[method] += parseInt(row.total, 10) || 0;
+      }
+    }
+
+    // Ingresos/egresos de caja afectan solo el efectivo del cajón
     const incomes = await this.movementsRepo.find({
-      where: {
-        cashShiftId: shiftId,
-        type: CashMovementType.INCOME,
-      },
+      where: { cashShiftId: shiftId, type: CashMovementType.INCOME },
     });
+    expected[PaymentMethod.CASH] += incomes.reduce((sum, m) => sum + m.amount, 0);
 
-    total += incomes.reduce((sum, m) => sum + m.amount, 0);
-
-    // Subtract expense movements
     const expenses = await this.movementsRepo.find({
-      where: {
-        cashShiftId: shiftId,
-        type: CashMovementType.EXPENSE,
-      },
+      where: { cashShiftId: shiftId, type: CashMovementType.EXPENSE },
     });
+    expected[PaymentMethod.CASH] -= expenses.reduce((sum, m) => sum + m.amount, 0);
 
-    total -= expenses.reduce((sum, m) => sum + m.amount, 0);
-
-    return total;
+    return expected;
   }
 
   async getShiftSummary(shiftId: string, companyId: string): Promise<any> {
@@ -277,9 +310,34 @@ export class ShiftsService {
 
     const countedTotal = counts.reduce((sum, c) => sum + c.countedAmount, 0);
 
-    // Calculate expected total
-    const expectedTotal = shift.openingFloat + totalPayments + totalIncome - totalExpenses;
-    const difference = countedTotal - expectedTotal;
+    // (H5/Sprint D) Esperado por método y conciliación por método.
+    const expectedByMethod = await this.computeExpectedByMethod(shiftId);
+    const expectedTotal = Object.values(expectedByMethod).reduce((s, v) => s + v, 0);
+
+    // Conciliación por método: esperado vs contado (solo métodos arqueados aportan
+    // a la diferencia, para no marcar faltantes por métodos sin arqueo físico).
+    const countedByMethod = new Map<string, number>();
+    counts.forEach((c) => countedByMethod.set(c.method, c.countedAmount));
+
+    const byMethod = Object.entries(expectedByMethod).map(([method, exp]) => {
+      const counted = countedByMethod.has(method)
+        ? (countedByMethod.get(method) as number)
+        : null;
+      return {
+        method,
+        expected: exp,
+        counted,
+        difference: counted !== null ? counted - exp : null,
+      };
+    });
+
+    const difference =
+      counts.length > 0
+        ? counts.reduce(
+            (sum, c) => sum + (c.countedAmount - (expectedByMethod[c.method] ?? 0)),
+            0,
+          )
+        : null;
 
     return {
       shift: {
@@ -290,7 +348,7 @@ export class ShiftsService {
         openingFloat: shift.openingFloat,
         openingNotes: shift.openingNotes,
         closingNotes: shift.closingNotes,
-        expectedTotal: shift.expectedTotal || expectedTotal,
+        expectedTotal: shift.expectedTotal ?? expectedTotal,
         countedTotal: shift.countedTotal,
         difference: shift.difference,
         cashier: shift.cashier ? {
@@ -308,10 +366,11 @@ export class ShiftsService {
         paymentsCount: payments.length,
         totalIncome,
         totalExpenses,
-        expectedTotal: shift.expectedTotal || expectedTotal,
+        expectedTotal: shift.expectedTotal ?? expectedTotal,
         countedTotal: shift.countedTotal !== null ? shift.countedTotal : countedTotal,
         difference: shift.difference !== null ? shift.difference : difference,
       },
+      byMethod,
       payments,
       movements,
       counts,
