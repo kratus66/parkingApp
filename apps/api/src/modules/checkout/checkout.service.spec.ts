@@ -170,7 +170,7 @@ describe('CheckoutService', () => {
       jest.spyOn(sessionRepo, 'findOne').mockResolvedValue(mockSession as any);
 
       const result = await service.preview(
-        { sessionId: 'session-1', lostTicket: false },
+        { sessionId: 'session-1' },
         'company-1',
         'lot-1',
         'user-1',
@@ -182,20 +182,20 @@ describe('CheckoutService', () => {
       expect(result.ticketNumber).toBe('TICKET-001');
     });
 
-    it('should add lost ticket fee when applicable', async () => {
+    it('should not apply any lost-ticket surcharge (E4/H10)', async () => {
+      // La multa por tiquete perdido fue eliminada: si el cliente pierde el tiquete
+      // se reimprime gratis (búsqueda por placa) y se cobra la estancia normal.
       jest.spyOn(sessionRepo, 'findOne').mockResolvedValue(mockSession as any);
 
       const result = await service.preview(
-        { sessionId: 'session-1', lostTicket: true },
+        { sessionId: 'session-1' },
         'company-1',
         'lot-1',
         'user-1',
       );
 
-      // Lost ticket fee = max(5000, 10000 * 0.2) = 5000
-      expect(result.total).toBe(15000);
-      // TODO: Update test after pricing engine changes
-      // expect(result.quote.breakdown.lostTicketFee).toBe(5000);
+      // Total = base de la estancia, sin recargos.
+      expect(result.total).toBe(10000);
     });
 
     it('should throw error if session not found', async () => {
@@ -203,7 +203,7 @@ describe('CheckoutService', () => {
 
       await expect(
         service.preview(
-          { sessionId: 'invalid', lostTicket: false },
+          { sessionId: 'invalid' },
           'company-1',
           'lot-1',
           'user-1',
@@ -218,7 +218,7 @@ describe('CheckoutService', () => {
 
       await expect(
         service.preview(
-          { sessionId: 'session-1', lostTicket: false },
+          { sessionId: 'session-1' },
           'company-1',
           'lot-1',
           'user-1',

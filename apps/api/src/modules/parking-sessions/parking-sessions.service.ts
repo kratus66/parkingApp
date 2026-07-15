@@ -88,11 +88,13 @@ export class ParkingSessionsService {
       }
 
       // 2.6. Validar que existe un turno de caja abierto (si la política lo requiere)
+      // (E6/H13) Usa su propio flag `requireOpenShiftForCheckIn` (antes reutilizaba
+      // `requireOpenShiftForCheckout`, cuyo nombre solo hablaba del checkout).
       const policy = await queryRunner.manager.findOne(CashPolicy, {
         where: { parkingLotId: checkInDto.parkingLotId, companyId: operator.companyId },
       });
 
-      if (policy && policy.requireOpenShiftForCheckout) {
+      if (policy && policy.requireOpenShiftForCheckIn) {
         const openShift = await queryRunner.manager.findOne(CashShift, {
           where: {
             parkingLotId: checkInDto.parkingLotId,

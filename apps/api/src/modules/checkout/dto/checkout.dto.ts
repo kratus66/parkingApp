@@ -2,7 +2,6 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsArray,
-  IsBoolean,
   IsEnum,
   IsInt,
   IsNotEmpty,
@@ -61,15 +60,6 @@ export class CheckoutPreviewDto {
   sessionId: string;
 
   @ApiProperty({
-    description: 'Indica si se perdió el ticket (aplica cargo adicional)',
-    example: false,
-    required: false,
-  })
-  @IsBoolean()
-  @IsOptional()
-  lostTicket?: boolean;
-
-  @ApiProperty({
     description: 'Convenio a aplicar (opcional). Si se omite, se usa el del cliente.',
     required: false,
   })
@@ -86,15 +76,6 @@ export class CheckoutConfirmDto {
   @IsUUID()
   @IsNotEmpty()
   sessionId: string;
-
-  @ApiProperty({
-    description: 'Indica si se perdió el ticket (aplica cargo adicional)',
-    example: false,
-    required: false,
-  })
-  @IsBoolean()
-  @IsOptional()
-  lostTicket?: boolean;
 
   @ApiProperty({
     description: 'Items de pago (puede ser pago mixto)',

@@ -2,7 +2,13 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Payment, PaymentStatus } from '../../entities/payment.entity';
-import { PaymentItem } from '../../entities/payment-item.entity';
+import { PaymentItem, PaymentMethod } from '../../entities/payment-item.entity';
+import { CashShift, CashShiftStatus } from '../../entities/cash-shift.entity';
+import {
+  CashMovement,
+  CashMovementType,
+  CashMovementCategory,
+} from '../../entities/cash-movement.entity';
 import { AuditLog } from '../audit/entities/audit-log.entity';
 import { AuditAction } from '../audit/enums/audit-action.enum';
 
@@ -110,6 +116,37 @@ export class PaymentsService {
       payment.voidReason = reason;
 
       await manager.save(payment);
+
+      // (E5/Sprint E) Devolución en caja: si el pago estaba asociado a un turno que
+      // AÚN sigue abierto, registrar un egreso por la porción cobrada en EFECTIVO
+      // (lo que sale físicamente del cajón). Tarjeta/transferencia/QR no afectan el
+      // efectivo. La sesión de parqueo NO se reabre.
+      if (payment.cashShiftId) {
+        const shift = await manager.findOne(CashShift, {
+          where: { id: payment.cashShiftId },
+        });
+
+        if (shift && shift.status === CashShiftStatus.OPEN) {
+          const cashItems = await manager.find(PaymentItem, {
+            where: { paymentId: payment.id, method: PaymentMethod.CASH },
+          });
+          const cashAmount = cashItems.reduce((sum, it) => sum + it.amount, 0);
+
+          if (cashAmount > 0) {
+            const movement = manager.create(CashMovement, {
+              companyId,
+              parkingLotId: payment.parkingLotId,
+              cashShiftId: shift.id,
+              type: CashMovementType.EXPENSE,
+              category: CashMovementCategory.OTHER,
+              amount: cashAmount,
+              description: `Devolución por anulación de pago ${payment.id}: ${reason}`,
+              createdByUserId: userId,
+            });
+            await manager.save(movement);
+          }
+        }
+      }
 
       // AuditLog
       await manager.save(AuditLog, {

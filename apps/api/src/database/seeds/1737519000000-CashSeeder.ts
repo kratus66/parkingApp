@@ -41,6 +41,7 @@ export default class CashSeeder1737519000000 {
         companyId: parkingLot.companyId,
         parkingLotId: parkingLot.id,
         requireOpenShiftForCheckout: true,
+        requireOpenShiftForCheckIn: true,
         defaultShiftHours: 8,
         allowMultipleOpenShiftsPerCashier: false,
         allowMultipleOpenShiftsPerParkingLot: true,

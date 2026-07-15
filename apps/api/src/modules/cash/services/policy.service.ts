@@ -45,6 +45,7 @@ export class PolicyService {
         companyId,
         parkingLotId,
         requireOpenShiftForCheckout: true,
+        requireOpenShiftForCheckIn: true,
         defaultShiftHours: 8,
         allowMultipleOpenShiftsPerCashier: false,
         allowMultipleOpenShiftsPerParkingLot: true,

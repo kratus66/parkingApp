@@ -28,7 +28,6 @@ export default function CheckoutPage() {
   const [sessions, setSessions] = useState<any[]>([]);
   const [selectedSession, setSelectedSession] = useState<any>(null);
   const [preview, setPreview] = useState<CheckoutPreview | null>(null);
-  const [lostTicket, setLostTicket] = useState(false);
   const [paymentItems, setPaymentItems] = useState<PaymentItem[]>([]);
   const [currentMethod, setCurrentMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
   const [currentAmount, setCurrentAmount] = useState('');
@@ -47,12 +46,11 @@ export default function CheckoutPage() {
       .catch(() => setAgreements([]));
   }, []);
 
-  // Recalcula el preview aplicando ticket perdido y convenio seleccionados
-  const reprice = async (sessionId: string, lost: boolean, agreementId: string) => {
+  // Recalcula el preview aplicando el convenio seleccionado
+  const reprice = async (sessionId: string, agreementId: string) => {
     try {
       const previewData = await checkoutApi.preview(
         sessionId,
-        lost,
         agreementId || undefined,
       );
       setPreview(previewData);
@@ -88,13 +86,13 @@ export default function CheckoutPage() {
     setSearchTerm('');
     setSelectedAgreementId('');
     // Automáticamente previsualizar (el convenio del cliente se aplica solo)
-    await reprice(session.id, lostTicket, '');
+    await reprice(session.id, '');
   };
 
   const handleAgreementChange = async (agreementId: string) => {
     setSelectedAgreementId(agreementId);
     if (selectedSession) {
-      await reprice(selectedSession.id, lostTicket, agreementId);
+      await reprice(selectedSession.id, agreementId);
     }
   };
 
@@ -158,7 +156,6 @@ export default function CheckoutPage() {
       const result = await checkoutApi.confirm(
         selectedSession.id,
         paymentItems,
-        lostTicket,
         selectedAgreementId || undefined,
       );
       setInvoiceHtml(result.printableInvoiceHtml);
@@ -186,7 +183,6 @@ export default function CheckoutPage() {
     setPaymentItems([]);
     setCompleted(false);
     setInvoiceHtml('');
-    setLostTicket(false);
   };
 
   const paymentMethodIcons: Record<PaymentMethod, any> = {
@@ -344,22 +340,6 @@ export default function CheckoutPage() {
                   <p className="text-2xl font-bold text-blue-600">
                     {Math.floor(preview.totalMinutes / 60)}h {preview.totalMinutes % 60}m
                   </p>
-                </div>
-
-                <div className="pt-4 border-t">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={lostTicket}
-                      onChange={(e) => {
-                        setLostTicket(e.target.checked);
-                        if (selectedSession)
-                          reprice(selectedSession.id, e.target.checked, selectedAgreementId);
-                      }}
-                      className="w-4 h-4"
-                    />
-                    <span className="text-sm">Ticket perdido (+20% o mín $5,000)</span>
-                  </label>
                 </div>
 
                 {/* Convenio / descuento */}

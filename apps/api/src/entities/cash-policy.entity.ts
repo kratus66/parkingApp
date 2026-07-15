@@ -31,6 +31,13 @@ export class CashPolicy {
   requireOpenShiftForCheckout: boolean;
 
   @Column({
+    type: 'boolean',
+    default: true,
+    comment: 'Exigir turno abierto para registrar entradas (check-in)',
+  })
+  requireOpenShiftForCheckIn: boolean;
+
+  @Column({
     type: 'int',
     default: 8,
     comment: 'Duración default del turno en horas',
