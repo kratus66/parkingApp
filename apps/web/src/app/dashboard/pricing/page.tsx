@@ -3,6 +3,9 @@
 import { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Power, DollarSign } from 'lucide-react';
 
+// (F2/H16) Base del API desde env, no hardcodeada.
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+
 interface TariffPlan {
   id: string;
   name: string;
@@ -53,7 +56,7 @@ export default function PricingPage() {
       const headers = { Authorization: `Bearer ${token}` };
 
       // Load plans
-      const plansRes = await fetch('http://localhost:3002/api/v1/pricing/plans', { headers });
+      const plansRes = await fetch(`${API_BASE}/pricing/plans`, { headers });
       const plansData = await plansRes.json();
       setPlans(plansData);
 
@@ -64,7 +67,7 @@ export default function PricingPage() {
 
         // Load rules for active plan
         const rulesRes = await fetch(
-          `http://localhost:3002/api/v1/pricing/rules?tariffPlanId=${activePlan.id}`,
+          `${API_BASE}/pricing/rules?tariffPlanId=${activePlan.id}`,
           { headers }
         );
         const rulesData = await rulesRes.json();
@@ -72,7 +75,7 @@ export default function PricingPage() {
       }
 
       // Load config
-      const configRes = await fetch('http://localhost:3002/api/v1/pricing/config', { headers });
+      const configRes = await fetch(`${API_BASE}/pricing/config`, { headers });
       const configData = await configRes.json();
       setConfig(configData);
     } catch (error) {
@@ -85,7 +88,7 @@ export default function PricingPage() {
   const activatePlan = async (planId: string) => {
     try {
       const token = localStorage.getItem('token');
-      await fetch(`http://localhost:3002/api/v1/pricing/plans/${planId}/activate`, {
+      await fetch(`${API_BASE}/pricing/plans/${planId}/activate`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });

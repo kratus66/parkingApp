@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { ParkingSession, ParkingSessionStatus } from '../../entities/parking-session.entity';
 import { ParkingSpot, SpotStatus } from '../../entities/parking-spot.entity';
+import { SpotStatusHistory } from '../../entities/spot-status-history.entity';
 import { Payment, PaymentStatus } from '../../entities/payment.entity';
 import { PaymentItem, PaymentMethod } from '../../entities/payment-item.entity';
 import { CustomerInvoice, InvoiceStatus } from '../../entities/customer-invoice.entity';
@@ -353,12 +354,25 @@ export class CheckoutService {
       session.closedByUserId = userId;
       await manager.save(session);
 
-      // 11. Liberar spot
+      // 11. Liberar spot (F6/H11): además de marcarlo FREE, se limpia el sessionId
+      // (dato obsoleto) y se registra el cambio en spot_status_history.
       const spot = session.spot;
       const beforeSpot = { ...spot };
+      const spotFromStatus = spot.status;
       spot.status = SpotStatus.FREE;
-      // spot.currentSessionId = null; // Property doesn't exist
+      spot.sessionId = null;
+      spot.lastStatusChange = new Date();
       await manager.save(spot);
+
+      await manager.save(SpotStatusHistory, {
+        companyId,
+        parkingLotId,
+        spotId: spot.id,
+        fromStatus: spotFromStatus,
+        toStatus: SpotStatus.FREE,
+        reason: `Checkout sesión ${session.ticketNumber}`,
+        actorUserId: userId,
+      });
 
       // 12. AuditLog
       await manager.save(AuditLog, {

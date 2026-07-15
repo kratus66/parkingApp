@@ -4,6 +4,7 @@ import { CheckoutController } from './checkout.controller';
 import { CheckoutService } from './checkout.service';
 import { ParkingSession } from '../../entities/parking-session.entity';
 import { ParkingSpot } from '../../entities/parking-spot.entity';
+import { SpotStatusHistory } from '../../entities/spot-status-history.entity';
 import { Payment } from '../../entities/payment.entity';
 import { PaymentItem } from '../../entities/payment-item.entity';
 import { CustomerInvoice } from '../../entities/customer-invoice.entity';
@@ -29,6 +30,7 @@ import { InvoiceService } from './invoice.service';
     TypeOrmModule.forFeature([
       ParkingSession,
       ParkingSpot,
+      SpotStatusHistory,
       Payment,
       PaymentItem,
       CustomerInvoice,

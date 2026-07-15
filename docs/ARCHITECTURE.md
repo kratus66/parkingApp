@@ -36,7 +36,8 @@ parkingApp/
 
 ## Módulos del Backend
 
-23 módulos en `apps/api/src/modules/`. Agrupados por dominio:
+22 módulos de negocio en `apps/api/src/modules/` (más `realtime`, un stub sin cablear).
+Tras el Sprint F se retiró el módulo `vehicles` v1. Agrupados por dominio:
 
 ### Núcleo / plataforma
 | Módulo | Responsabilidad |
@@ -71,11 +72,11 @@ parkingApp/
 | `notifications` | Registro de notificaciones (proveedor **mock**; entidad hoy desincronizada de la tabla — ver BUSINESS_LOGIC H3) |
 | `realtime` | Stub de gateway WebSocket (sin uso; la UI usa polling) |
 
-### Legacy (no usar — ver BUSINESS_LOGIC §9)
+### Legacy retirado (Sprint F / F3)
 | Módulo | Estado |
 |---|---|
-| `vehicles` (v1) | Tabla `vehicles` con `licensePlate` y blacklist; **el check-in no la consulta** |
-| `tickets` | Flujo de tickets Sprint 1 con tarifa fija en código; reemplazado por `parking-sessions` + `checkout` |
+| `vehicles` (v1) | **Módulo eliminado.** La entidad/tabla `vehicles` permanece (referenciada por `parking-lot` y `notification-log`) |
+| `tickets` (flujo) | `TicketsController`/`TicketsService` (tarifa fija) **eliminados**. El módulo `tickets` conserva solo `TicketTemplatesService` (plantillas de ticket, usado por parking-sessions) |
 
 ## Entidades y ubicación
 

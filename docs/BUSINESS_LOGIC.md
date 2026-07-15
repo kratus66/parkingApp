@@ -483,19 +483,17 @@ Consent:         historial GRANTED/REVOKED; el más reciente por canal es el vig
 
 ## 9. Módulos legacy y rutas duplicadas
 
-El repo contiene **dos generaciones** de módulos conviviendo. Solo la columna "Vigente" está
-integrada al flujo operativo:
+Los flujos legacy fueron **retirados en los Sprints D y F**. Solo queda la columna "Vigente".
 
-| Dominio | Vigente (usar) | Legacy (no usar / retirar) |
+| Dominio | Vigente (usar) | Legacy — estado |
 |---|---|---|
-| Vehículos | `vehicles-v2` (tabla `vehicles_v2`, campo `plate`, requiere cliente) | `vehicles` (tabla `vehicles`, campo `licensePlate`, sin cliente, con blacklist que **nadie consulta en el check-in**) |
-| Entrada/estancia | `parking-sessions` (check-in, activos, reimpresión, cancelación) | `tickets` (tabla `tickets`, tarifa fija $3.000/h en código) |
-| Salida/cobro | `checkout` (preview/confirm + motor de tarifas + factura + pago + caja) | ~~`POST /parking-sessions/:id/check-out`~~ **eliminado en Sprint D (H1)** |
+| Vehículos | `vehicles-v2` (tabla `vehicles_v2`, campo `plate`, requiere cliente) | ~~`vehicles` (v1)~~ **módulo eliminado (F3)**; la entidad/tabla `vehicles` permanece por referencias de otras entidades |
+| Entrada/estancia | `parking-sessions` (check-in, activos, reimpresión, cancelación) | ~~`tickets` (tarifa fija en código)~~ **`TicketsController`/`TicketsService` eliminados (F3)**; se conserva `TicketTemplatesService` (plantillas de ticket) |
+| Salida/cobro | `checkout` (preview/confirm + motor de tarifas + factura + pago + caja) | ~~`POST /parking-sessions/:id/check-out`~~ **eliminado (Sprint D / H1)** |
 | Ingresos del dashboard | `ops.getDashboardStats` suma `payments` `PAID` del día (Sprint D / H2) | ~~sumaba `tickets.amount` (siempre $0)~~ **corregido** |
 
-**Riesgo de negocio**: mientras ambas rutas de salida existan, dos cajeros pueden cobrar
-montos distintos por la misma estancia según la pantalla que usen, y la vía legacy no deja
-rastro contable (ni factura, ni pago, ni caja).
+Con esto, **la salida con cobro tiene una única ruta** (`checkout`): no hay forma de cerrar
+una sesión cobrando por fuera del motor de tarifas, la factura, el pago y la caja.
 
 ---
 
@@ -527,23 +525,26 @@ Resumen priorizado de lo que el código hace hoy y requiere corrección o decisi
 | H8 ✅ | **RESUELTO (E2)**. El `dailyMax` se aplica **por cada día calendario**, no una vez por estancia. | `pricing-engine.service.ts` |
 | H9 ✅ | **RESUELTO (E3)**. `findApplicableRule` exige `tariffPlan.isActive = true`; las reglas de planes desactivados dejan de cobrar. | `pricing-engine.service.ts` |
 | H10 ✅ | **RESUELTO (E4)**. Se **eliminó la multa** de tiquete perdido del checkout (decisión: se reimprime gratis y se cobra la estancia normal). `PricingConfig.lostTicketFee` queda sin efecto en el cobro. | `checkout.service.ts` |
-| H11 | `checkout.confirm` libera el puesto **sin limpiar `sessionId` ni escribir `spot_status_history`** (dato obsoleto + historial incompleto). Usar `releaseSpotSimple`/`releaseSpot`. → Sprint F (F6). | `checkout.service.ts` |
+| H11 ✅ | **RESUELTO (F6)**. `checkout.confirm` limpia `sessionId` + `lastStatusChange` y escribe `spot_status_history` al liberar el puesto. | `checkout.service.ts` |
 | H12 ✅ | **RESUELTO (D3)**. `findActiveByPlate` filtra por empresa e itera los vehículos hallados (ya no deja `vehicleId` en `undefined`). | `parking-sessions.service.ts` |
 | H13 ✅ | **RESUELTO (E6)**. Flags separados `requireOpenShiftForCheckIn` / `...Checkout` (ambos `true` por defecto); el check-in usa el suyo. | `cash-policy.entity.ts`, `parking-sessions.service.ts` |
 | H14 | Columnas `timestamp` sin zona horaria + `plan.timezone` ignorado: el cobro depende de la TZ del servidor. Migrar a `timestamptz`. | entidades / motor |
 | H15 ✅ | **RESUELTO (D7)**. El `HttpExceptionFilter` global traduce `QueryFailedError` de Postgres (23505→409, 23503→409, 22P02→400, 23502→400); `ParseUUIDPipe` añadido en los `:id` de facturas del checkout. | `common/filters/http-exception.filter.ts`, `checkout.controller.ts` |
-| H16 | Frontend: URLs **hardcodeadas a `localhost:3002`** en pricing, simulador y `LiveQuote` (ignoran `NEXT_PUBLIC_API_URL`); CORS del backend hardcodeado a 3000/3003/3005 (ignora `CORS_ORIGIN`). | `apps/web/.../pricing/*.tsx`, `LiveQuote.tsx`, `apps/api/src/main.ts:22` |
+| H16 ✅ | **RESUELTO (F2)**. El frontend usa `NEXT_PUBLIC_API_URL` (sin `localhost:3002`); `main.ts` lee `CORS_ORIGIN` (lista por comas, fallback dev). | `apps/web/...`, `apps/api/src/main.ts` |
 
 ### Menores / deuda
 
-- Ticket `YYYYMMDD-####` con consecutivo que no se reinicia por día (o reiniciar por día o
-  quitar la fecha del formato).
-- Entidad `Refund` sin uso; las anulaciones no generan contramovimiento de caja.
-- La blacklist de vehículos (legacy v1) no se consulta en el check-in.
-- `console.log` con datos personales de clientes en servicios de producción (PII en logs).
+- Ticket `YYYYMMDD-####` con consecutivo que no se reinicia por día (F7, diferido).
+- Entidad `Refund` sin uso; la anulación de pago sí genera un egreso de caja (E5) pero no una
+  devolución formal.
+- ✅ *(F3)* Los flujos legacy `tickets` y `vehicles` v1 fueron retirados; quedan solo las
+  **tablas/entidades** `tickets` y `vehicles` (referenciadas por otras entidades) — retirar el
+  esquema es limpieza futura.
+- ✅ *(F5)* Se limpiaron los `console.log` con PII de clientes/placas.
 - Campos de `TariffRule` que el motor ignora (`startTime`/`endTime`/`graceMinutes`/`dailyMax`)
   — retirar de la tabla o implementar.
 - Respuestas con doble envoltura `{ data: { data, meta } }` por el `TransformInterceptor`
-  (el front lo mitiga defensivamente).
-- JWT de 7 días en `localStorage`, sin refresh tokens.
-- El gateway realtime (WebSocket) es un stub: la ocupación "en vivo" se actualiza por polling.
+  (F4, diferido; el front lo mitiga defensivamente).
+- JWT de 7 días en `localStorage`, sin refresh tokens (F8, diferido).
+- El gateway realtime (WebSocket) es un stub: la ocupación "en vivo" se actualiza por polling
+  (F9, diferido — decidir implementar o eliminar).

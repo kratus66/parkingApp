@@ -17,9 +17,15 @@ async function bootstrap() {
   // Security
   app.use(helmet());
 
-  // CORS
+  // CORS (F2/H16): lee CORS_ORIGIN de la config (lista separada por comas). Si no
+  // está definida, cae a los puertos de desarrollo habituales.
+  const corsOrigin = configService.get<string>('CORS_ORIGIN');
+  const allowedOrigins = corsOrigin
+    ? corsOrigin.split(',').map((o) => o.trim()).filter(Boolean)
+    : ['http://localhost:3000', 'http://localhost:3003', 'http://localhost:3005'];
+
   app.enableCors({
-    origin: ['http://localhost:3000', 'http://localhost:3003', 'http://localhost:3005'],
+    origin: allowedOrigins,
     credentials: true,
   });
 

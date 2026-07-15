@@ -3,6 +3,9 @@
 import { useState } from 'react';
 import { Calculator, Clock, DollarSign } from 'lucide-react';
 
+// (F2/H16) Base del API desde env, no hardcodeada.
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+
 interface QuoteRequest {
   vehicleType: 'BICYCLE' | 'MOTORCYCLE' | 'CAR' | 'TRUCK_BUS';
   entryAt: string;
@@ -54,7 +57,7 @@ export default function PricingSimulator() {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:3002/api/v1/pricing/quote', {
+      const response = await fetch(`${API_BASE}/pricing/quote`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
