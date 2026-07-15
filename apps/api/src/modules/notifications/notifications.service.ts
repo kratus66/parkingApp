@@ -1,9 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { NotificationLog } from './entities/notification-log.entity';
+import { NotificationLog, NotificationStatus } from '../../entities/notification-log.entity';
 import { ParkingSession } from '../../entities/parking-session.entity';
-import { NotificationType, NotificationStatus } from './entities/notification-log.entity';
 
 export interface NotificationProvider {
   sendWhatsApp(phoneNumber: string, message: string): Promise<boolean>;
@@ -122,15 +121,15 @@ ${ticketContent}
   // Métodos para consultar logs
   async getNotificationLogs(sessionId: string) {
     return this.notificationLogsRepository.find({
-      where: { sessionId },
-      order: { sentAt: 'DESC' },
+      where: { parkingSessionId: sessionId },
+      order: { createdAt: 'DESC' },
     });
   }
 
   async getFailedNotifications() {
     return this.notificationLogsRepository.find({
       where: { status: NotificationStatus.FAILED },
-      order: { sentAt: 'DESC' },
+      order: { createdAt: 'DESC' },
     });
   }
 
@@ -143,8 +142,8 @@ ${ticketContent}
       throw new Error('Log de notificación no válido para reintento');
     }
 
-    // Por ahora, solo marcar como pendiente para reintento manual
-    log.status = NotificationStatus.PENDING;
+    // Por ahora, solo marcar como en cola para reintento manual
+    log.status = NotificationStatus.QUEUED;
     await this.notificationLogsRepository.save(log);
   }
 }

@@ -306,6 +306,39 @@ export class OccupancyService {
     });
   }
 
+  /**
+   * (H6/Sprint D) Igual que findAvailableSpot pero con lock pesimista dentro de la
+   * transacción del check-in, para que dos entradas concurrentes no tomen el mismo
+   * puesto. Debe llamarse con el queryRunner de una transacción activa.
+   */
+  async findAvailableSpotLocked(
+    parkingLotId: string,
+    vehicleType: VehicleType,
+    queryRunner: any,
+  ): Promise<ParkingSpot | null> {
+    return queryRunner.manager
+      .createQueryBuilder(ParkingSpot, 'spot')
+      .setLock('pessimistic_write')
+      .where('spot.parkingLotId = :parkingLotId', { parkingLotId })
+      .andWhere('spot.spotType = :vehicleType', { vehicleType })
+      .andWhere('spot.status = :status', { status: SpotStatus.FREE })
+      .orderBy('spot.priority', 'DESC')
+      .addOrderBy('spot.code', 'ASC')
+      .getOne();
+  }
+
+  /**
+   * (H6/Sprint D) Lee un puesto por id con lock pesimista dentro de la transacción
+   * del check-in (para validar/ocupar un puesto solicitado explícitamente sin carrera).
+   */
+  async findSpotByIdLocked(spotId: string, queryRunner: any): Promise<ParkingSpot | null> {
+    return queryRunner.manager
+      .createQueryBuilder(ParkingSpot, 'spot')
+      .setLock('pessimistic_write')
+      .where('spot.id = :spotId', { spotId })
+      .getOne();
+  }
+
   async occupySpot(spotId: string, sessionId: string, queryRunner?: any) {
     const manager = queryRunner ? queryRunner.manager : this.dataSource.manager;
     

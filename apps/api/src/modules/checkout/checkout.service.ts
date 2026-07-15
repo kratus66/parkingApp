@@ -451,8 +451,8 @@ export class CheckoutService {
       }
 
       // Generar HTML imprimible
-      const printableHtml = result.invoice 
-        ? await this.invoiceService.generateInvoiceHtml(result.invoice.id)
+      const printableHtml = result.invoice
+        ? await this.invoiceService.generateInvoiceHtml(result.invoice.id, companyId)
         : null;
 
       return {
@@ -469,8 +469,12 @@ export class CheckoutService {
     parkingLotId: string,
     manager: any,
   ): Promise<string> {
+    // (H6/Sprint D) Lock pesimista para serializar el consecutivo de respaldo (se usa
+    // solo cuando no hay resolución DIAN; la numeración fiscal ya usa su propio lock).
+    // Siempre se invoca dentro de la transacción del checkout.
     let counter = await manager.findOne(InvoiceCounter, {
       where: { parkingLotId },
+      lock: { mode: 'pessimistic_write' },
     });
 
     if (!counter) {

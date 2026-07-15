@@ -6,6 +6,7 @@ import { CashPolicy } from '../../../entities/cash-policy.entity';
 import { CashMovement, CashMovementType } from '../../../entities/cash-movement.entity';
 import { CashCount } from '../../../entities/cash-count.entity';
 import { Payment, PaymentStatus } from '../../../entities/payment.entity';
+import { PaymentItem } from '../../../entities/payment-item.entity';
 import { AuditLog } from '../../audit/entities/audit-log.entity';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 
@@ -37,6 +38,19 @@ describe('ShiftsService', () => {
 
   const mockPaymentsRepo = {
     find: jest.fn(() => Promise.resolve([])),
+  };
+
+  // (H5/Sprint D) El esperado por método consulta payment_items agrupados por método.
+  const mockPaymentItemsRepo = {
+    createQueryBuilder: jest.fn(() => ({
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      innerJoin: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn(() => Promise.resolve([{ method: 'CASH', total: '30000' }])),
+    })),
   };
 
   const mockMovementsRepo = {
@@ -75,6 +89,10 @@ describe('ShiftsService', () => {
         {
           provide: getRepositoryToken(Payment),
           useValue: mockPaymentsRepo,
+        },
+        {
+          provide: getRepositoryToken(PaymentItem),
+          useValue: mockPaymentItemsRepo,
         },
         {
           provide: getRepositoryToken(AuditLog),
@@ -168,6 +186,51 @@ describe('ShiftsService', () => {
 
       expect(result.status).toBe(CashShiftStatus.CLOSED);
       expect(result.expectedTotal).toBe(82000); // 50000 + 30000 + 5000 - 3000
+    });
+
+    it('should reconcile by method: cash counted + card not counted → no false shortage (H5)', async () => {
+      const shift = {
+        id: 'shift-1',
+        companyId: 'company-1',
+        parkingLotId: 'lot-1',
+        cashierUserId: 'user-1',
+        status: CashShiftStatus.OPEN,
+        openingFloat: 0,
+      };
+
+      shiftsRepo.findOne.mockResolvedValue(shift);
+      // 10.000 en efectivo + 20.000 en tarjeta
+      mockPaymentItemsRepo.createQueryBuilder.mockReturnValueOnce({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn(() =>
+          Promise.resolve([
+            { method: 'CASH', total: '10000' },
+            { method: 'CARD', total: '20000' },
+          ]),
+        ),
+      });
+      movementsRepo.find.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+      // El cajero solo arquea el efectivo del cajón (10.000), que coincide con lo esperado
+      mockCountsRepo.find.mockResolvedValueOnce([
+        { method: 'CASH', countedAmount: 10000 },
+      ] as any);
+
+      const result = await service.closeShift(
+        'shift-1',
+        {},
+        'user-1',
+        'company-1',
+      );
+
+      // Antes: diferencia = 10000 - 30000 = -20000 (faltante falso por la tarjeta).
+      // Ahora: solo se concilia el efectivo → diferencia 0.
+      expect(result.difference).toBe(0);
+      expect(result.expectedTotal).toBe(30000); // 10000 CASH + 20000 CARD
     });
 
     it('should throw NotFoundException if shift not found', async () => {

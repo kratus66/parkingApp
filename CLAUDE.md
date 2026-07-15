@@ -8,7 +8,7 @@ Sistema SaaS de gestión de parqueaderos. Monorepo npm workspaces:
 | Doc | Rol |
 |---|---|
 | `docs/BUSINESS_LOGIC.md` | **Canónico**: lógica de negocio end-to-end, RBAC, motor de tarifas, caja, invariantes, hallazgos **H1–H16** (referirse a ellos por código, p. ej. "fix H4") |
-| `docs/ROADMAP.md` | Plan priorizado: **Sprint D** (correcciones críticas D1–D7), **Sprint E** (decisiones de negocio E1–E7), **Sprint F** (endurecimiento F1–F9) |
+| `docs/ROADMAP.md` | Plan priorizado: **Sprint D ✅ COMPLETADO** (D1–D7), **Sprint E** (decisiones de negocio E1–E7, pendiente), **Sprint F** (endurecimiento F1–F9, pendiente) |
 | `docs/ARCHITECTURE.md` | Módulos (23), entidades, seguridad, envs |
 | `SPRINT_*.md` (raíz) | Bitácora histórica. Sprints A (flujo operativo), B (convenios) y C (facturación DIAN) COMPLETADOS. Ante conflicto manda BUSINESS_LOGIC.md |
 
@@ -36,8 +36,8 @@ cd apps/web && npx next dev -p 3003                                         # We
 
 - **Flujo vigente**: cliente → vehículo **v2** (`/vehicles-v2`) → `POST
   /parking-sessions/check-in` → `/checkout/preview` → `/checkout/confirm`.
-  **NO usar** los legacy: `/vehicles` (v1), `/tickets`, ni
-  `POST /parking-sessions/:id/check-out` (tarifas hardcodeadas, sin factura/caja — H1).
+  **NO usar** los legacy `/vehicles` (v1) y `/tickets`. El endpoint
+  `POST /parking-sessions/:id/check-out` ya **fue eliminado** en Sprint D (H1).
 - El precio SIEMPRE lo calcula el servidor en el confirm (motor de tarifas + convenio) y
   queda congelado en `PricingSnapshot`. Los medios de pago deben sumar exacto el total.
 - Precio **incluye IVA 19 %**; `FiscalService` extrae base/IVA y calcula CUFE; numeración de

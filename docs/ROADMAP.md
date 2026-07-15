@@ -10,7 +10,11 @@
 
 ---
 
-## Sprint D — Correcciones críticas (dinero e integridad)
+## Sprint D — Correcciones críticas (dinero e integridad) ✅ COMPLETADO
+
+> **Estado: COMPLETADO (2026-07-15)** en la rama `sprint-d-correcciones-criticas`.
+> D1–D7 implementados; `npm run build` (api y web) y `npm test` (34/34) en verde.
+> Resumen de lo hecho al final de cada ítem.
 
 Objetivo: que no exista forma de cobrar mal, perder dinero de vista, ni filtrar datos entre
 empresas. Todo es corrección de código sin decisiones de negocio pendientes.

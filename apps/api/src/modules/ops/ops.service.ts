@@ -11,7 +11,7 @@ import { Vehicle } from '../../entities/vehicle-v2.entity';
 import { ParkingSession, ParkingSessionStatus } from '../../entities/parking-session.entity';
 import { ParkingSpot } from '../../entities/parking-spot.entity';
 import { ParkingZone } from '../../entities/parking-zone.entity';
-import { Ticket } from '../../entities/ticket.entity';
+import { Payment, PaymentStatus } from '../../entities/payment.entity';
 
 @Injectable()
 export class OpsService {
@@ -24,8 +24,8 @@ export class OpsService {
     private readonly spotRepo: Repository<ParkingSpot>,
     @InjectRepository(ParkingZone)
     private readonly zoneRepo: Repository<ParkingZone>,
-    @InjectRepository(Ticket)
-    private readonly ticketRepo: Repository<Ticket>,
+    @InjectRepository(Payment)
+    private readonly paymentRepo: Repository<Payment>,
   ) {}
 
   /**
@@ -209,12 +209,15 @@ export class OpsService {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    const dailyRevenue = await this.ticketRepo
-      .createQueryBuilder('ticket')
-      .select('SUM(ticket.amount)', 'total')
-      .where('ticket.parkingLotId = :parkingLotId', { parkingLotId })
-      .andWhere('ticket.paidAt >= :today', { today })
-      .andWhere('ticket.paidAt < :tomorrow', { tomorrow })
+    // Recaudo del día: suma de pagos efectivos (PAID) del checkout, excluye anulados.
+    // (H2/Sprint D) Antes leía la tabla legacy `tickets`, que el flujo actual no usa → $0.
+    const dailyRevenue = await this.paymentRepo
+      .createQueryBuilder('payment')
+      .select('SUM(payment.totalAmount)', 'total')
+      .where('payment.parkingLotId = :parkingLotId', { parkingLotId })
+      .andWhere('payment.status = :status', { status: PaymentStatus.PAID })
+      .andWhere('payment.createdAt >= :today', { today })
+      .andWhere('payment.createdAt < :tomorrow', { tomorrow })
       .getRawOne();
 
     // Entradas de hoy

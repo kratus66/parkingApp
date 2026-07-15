@@ -140,9 +140,11 @@ export class InvoiceService {
   /**
    * Generar HTML imprimible de factura
    */
-  async generateInvoiceHtml(invoiceId: string): Promise<string> {
+  async generateInvoiceHtml(invoiceId: string, companyId?: string): Promise<string> {
+    // (H4/Sprint D) Scoping por empresa: si se pasa companyId, se exige que la factura
+    // pertenezca a esa empresa (evita leer facturas de otra empresa por UUID).
     const invoice = await this.invoiceRepo.findOne({
-      where: { id: invoiceId },
+      where: companyId ? { id: invoiceId, companyId } : { id: invoiceId },
       relations: [
         'items',
         'customer',

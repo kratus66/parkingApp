@@ -325,11 +325,10 @@ IVA (informativo) = el total YA incluye IVA 19%: base = round(total/1.19), iva =
 ⚠️ La anulación es solo contable-documental: no reabre la sesión, no recalcula la caja y no
 genera devolución (la entidad `Refund` existe pero no se usa).
 
-> ⚠️ **Existe una segunda ruta de salida legacy** (`POST /parking-sessions/:id/check-out`,
-> usada por el modal rápido del dashboard) con **tarifas fijas en código** (auto $3.000/h,
-> moto $2.000, bici $1.000, camión $5.000), sin gracia, sin convenios, **sin factura, sin
-> pago y sin caja**. Es el hallazgo más grave: ver H1 en la
-> [sección 10](#10-hallazgos-y-decisiones-abiertas).
+> ✅ **Sprint D (H1)**: la antigua ruta de salida legacy `POST /parking-sessions/:id/check-out`
+> (tarifas fijas en código, sin factura/pago/caja) **fue eliminada**. La salida con cobro se
+> realiza exclusivamente por este flujo `checkout`. El botón "Registrar Salida" del dashboard
+> enruta a `/ops/checkout`.
 
 ### Paso 6 — Consentimientos y notificaciones
 
@@ -485,8 +484,8 @@ integrada al flujo operativo:
 |---|---|---|
 | Vehículos | `vehicles-v2` (tabla `vehicles_v2`, campo `plate`, requiere cliente) | `vehicles` (tabla `vehicles`, campo `licensePlate`, sin cliente, con blacklist que **nadie consulta en el check-in**) |
 | Entrada/estancia | `parking-sessions` (check-in, activos, reimpresión, cancelación) | `tickets` (tabla `tickets`, tarifa fija $3.000/h en código) |
-| Salida/cobro | `checkout` (preview/confirm + motor de tarifas + factura + pago + caja) | `POST /parking-sessions/:id/check-out` (tarifas fijas en código, sin factura ni pago) — lo usa el `CheckOutModal` del dashboard ⚠️ |
-| Ingresos del dashboard | *(pendiente)* debería leer `payments`/`customer_invoices` | `ops.getDashboardStats` suma `tickets.amount` (siempre $0 con el flujo actual) ⚠️ |
+| Salida/cobro | `checkout` (preview/confirm + motor de tarifas + factura + pago + caja) | ~~`POST /parking-sessions/:id/check-out`~~ **eliminado en Sprint D (H1)** |
+| Ingresos del dashboard | `ops.getDashboardStats` suma `payments` `PAID` del día (Sprint D / H2) | ~~sumaba `tickets.amount` (siempre $0)~~ **corregido** |
 
 **Riesgo de negocio**: mientras ambas rutas de salida existan, dos cajeros pueden cobrar
 montos distintos por la misma estancia según la pantalla que usen, y la vía legacy no deja
@@ -499,16 +498,20 @@ rastro contable (ni factura, ni pago, ni caja).
 Resumen priorizado de lo que el código hace hoy y requiere corrección o decisión de negocio.
 (Referencias: servicio y línea aproximada.)
 
+> **Nota (2026-07-15):** los hallazgos críticos **H1–H6, H12 y H15 fueron corregidos en el
+> Sprint D** (rama `sprint-d-correcciones-criticas`). Se marcan con ✅ abajo. Ver
+> [ROADMAP.md](ROADMAP.md) para el detalle y los criterios de aceptación.
+
 ### Críticos (dinero / integridad)
 
 | # | Hallazgo | Dónde |
 |---|---|---|
-| H1 | **Doble ruta de salida**: el `CheckOutModal` usa el check-out legacy con tarifas hardcodeadas y sin factura/pago/caja; `/ops/checkout` es el flujo correcto. Decidir: eliminar el endpoint legacy o redirigirlo al checkout formal. | `parking-sessions.service.ts:456`, `apps/web/.../CheckOutModal.tsx` |
-| H2 | **`dailyRevenue` del dashboard lee la tabla legacy `tickets`** → siempre $0. Debe sumar `payments` `PAID` (o facturas `ISSUED`) del día. | `ops.service.ts:212` |
-| H3 | **Módulo notificaciones roto**: hay dos clases `NotificationLog` mapeando la misma tabla con columnas distintas (`session_id`/`sent_at` vs `parking_session_id`/`created_at`); los GET devuelven 500. Unificar en una sola entidad alineada con la migración. | `modules/notifications/entities/` vs `entities/notification-log.entity.ts` |
-| H4 | **Fugas multi-tenant**: `GET /checkout/invoices/:id/html` no filtra por empresa (cualquier usuario autenticado de otra empresa puede leer la factura por UUID); `GET /parking-sessions/by-ticket/:n` y `by-plate` tampoco scopean por empresa. | `invoice.service.ts:142`, `parking-sessions.service.ts:611-641` |
-| H5 | **Cierre de caja mezcla métodos**: `expectedTotal` suma pagos con tarjeta/transferencia como si fueran efectivo del cajón → diferencias falsas en el arqueo. Separar esperado por método. | `shifts.service.ts:200` |
-| H6 | **Concurrencia**: el contador de **tickets** y el contador de facturas **de respaldo** (`INV-########`, usado cuando no hay resolución DIAN) se incrementan con read-modify-write sin lock (duplicados posibles); el check-in asigna puesto sin lock pesimista (doble asignación posible — `assignSpot` sí lo hace bien, pero el check-in no lo usa). *Nota: la numeración por resolución DIAN (Sprint C) SÍ tiene lock pesimista.* | `parking-sessions.service.ts:715`, `checkout.service.ts` (`getNextInvoiceNumber`), `occupancy.service.ts:289-329` |
+| H1 ✅ | **RESUELTO (D1)**. Se eliminó el endpoint `POST /parking-sessions/:id/check-out` y su método (tarifas hardcodeadas, sin factura/pago/caja). El dashboard ahora enruta a `/ops/checkout` (preview/confirm). El `CheckOutModal` roto se borró. | `parking-sessions.controller.ts`, `apps/web/.../dashboard/page.tsx` |
+| H2 ✅ | **RESUELTO (D2)**. `dailyRevenue` suma `payments` con estado `PAID` del día (excluye anulados) en vez de la tabla legacy `tickets`. | `ops.service.ts` (getDashboardStats) |
+| H3 ✅ | **RESUELTO (D5)**. Se eliminó la entidad `NotificationLog` duplicada; el módulo usa la canónica (`entities/notification-log.entity.ts`, alineada con la migración) y las consultas usan `parkingSessionId`/`createdAt`. Los GET de logs responden 200. | `modules/notifications/*` |
+| H4 ✅ | **RESUELTO (D3)**. `generateInvoiceHtml` recibe y filtra por `companyId`; `findByTicketNumber` y `findActiveByPlate` scopean por empresa. | `invoice.service.ts`, `parking-sessions.service.ts` |
+| H5 ✅ | **RESUELTO (D4)**. El cierre calcula el esperado **por método** (`computeExpectedByMethod`): el efectivo del cajón ya no incluye tarjeta/transferencia/QR; la diferencia se concilia por método arqueado. | `shifts.service.ts` |
+| H6 ✅ | **RESUELTO (D6)**. Lock pesimista en el contador de tickets y en el de facturas de respaldo; el check-in asigna puesto con lock (`findAvailableSpotLocked`/`findSpotByIdLocked`). *(La numeración por resolución DIAN ya tenía lock.)* | `parking-sessions.service.ts`, `checkout.service.ts`, `occupancy.service.ts` |
 
 ### Medios (consistencia / reglas)
 
@@ -519,10 +522,10 @@ Resumen priorizado de lo que el código hace hoy y requiere corrección o decisi
 | H9 | El motor **ignora el plan activo**: reglas activas de planes desactivados siguen cobrando; activar un plan no desactiva las reglas del anterior. | `pricing-engine.service.ts:255`, `pricing.service.ts:98` |
 | H10 | **Multa por tiquete perdido duplicada e inconsistente**: checkout usa `max($5.000, 20 %)`; la config del parqueadero (`lostTicketFee`, seed $20.000) solo la usa el simulador. Unificar. | `checkout.service.ts:92,203` |
 | H11 | `checkout.confirm` libera el puesto **sin limpiar `sessionId` ni escribir `spot_status_history`** (dato obsoleto + historial incompleto). Usar `releaseSpotSimple`/`releaseSpot`. | `checkout.service.ts:322-327` |
-| H12 | `findActiveByPlate`: sin filtro de empresa y, si hay más de un vehículo con la placa, el `vehicleId` queda `undefined` y devuelve **cualquier** sesión activa del lot. | `parking-sessions.service.ts:611` |
+| H12 ✅ | **RESUELTO (D3)**. `findActiveByPlate` filtra por empresa e itera los vehículos hallados (ya no deja `vehicleId` en `undefined`). | `parking-sessions.service.ts` |
 | H13 | `requireOpenShiftForCheckout` también bloquea el **check-in** (nombre engañoso; ¿es la regla deseada?). | `parking-sessions.service.ts:90-109` |
 | H14 | Columnas `timestamp` sin zona horaria + `plan.timezone` ignorado: el cobro depende de la TZ del servidor. Migrar a `timestamptz`. | entidades / motor |
-| H15 | Errores de BD sin mapear: violaciones de unique (festivo duplicado) y UUID malformado en path params devuelven **500** en vez de 409/400 (falta `ParseUUIDPipe` y catch de constraints). | `holidays.service.ts:14`, controllers con `:id` |
+| H15 ✅ | **RESUELTO (D7)**. El `HttpExceptionFilter` global traduce `QueryFailedError` de Postgres (23505→409, 23503→409, 22P02→400, 23502→400); `ParseUUIDPipe` añadido en los `:id` de facturas del checkout. | `common/filters/http-exception.filter.ts`, `checkout.controller.ts` |
 | H16 | Frontend: URLs **hardcodeadas a `localhost:3002`** en pricing, simulador y `LiveQuote` (ignoran `NEXT_PUBLIC_API_URL`); CORS del backend hardcodeado a 3000/3003/3005 (ignora `CORS_ORIGIN`). | `apps/web/.../pricing/*.tsx`, `LiveQuote.tsx`, `apps/api/src/main.ts:22` |
 
 ### Menores / deuda

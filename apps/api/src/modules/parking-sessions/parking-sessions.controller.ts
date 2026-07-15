@@ -71,14 +71,10 @@ export class ParkingSessionsController {
     return this.parkingSessionsService.cancelSession(cancelDto, user);
   }
 
-  @Post(':id/check-out')
-  @Roles(UserRole.CASHIER, UserRole.SUPERVISOR, UserRole.ADMIN)
-  @ApiOperation({ summary: 'Registrar salida de vehículo' })
-  @ApiResponse({ status: 200, description: 'Salida registrada exitosamente' })
-  @ApiResponse({ status: 404, description: 'Sesión no encontrada' })
-  checkOut(@Param('id') id: string, @CurrentUser() user: User) {
-    return this.parkingSessionsService.checkOut(id, user);
-  }
+  // NOTA (Sprint D / H1): el antiguo endpoint `POST :id/check-out` fue eliminado.
+  // Cobraba con tarifas fijas en código, sin motor de tarifas, sin IVA/factura, sin
+  // Payment y sin caja. La salida con cobro se hace exclusivamente por el flujo
+  // `POST /checkout/preview` + `POST /checkout/confirm` (módulo checkout).
 
   @Get('active')
   @ApiOperation({ summary: 'Obtener todas las sesiones activas del parqueadero' })
@@ -107,15 +103,25 @@ export class ParkingSessionsController {
     @Param('plate') plate: string,
     @CurrentUser() user: User,
   ) {
-    return this.parkingSessionsService.findActiveByPlate(user.parkingLotId, plate);
+    return this.parkingSessionsService.findActiveByPlate(
+      user.parkingLotId,
+      plate,
+      user.companyId,
+    );
   }
 
   @Get('by-ticket/:ticketNumber')
   @ApiOperation({ summary: 'Buscar sesión por número de ticket' })
   @ApiResponse({ status: 200, description: 'Sesión encontrada' })
   @ApiResponse({ status: 404, description: 'Sesión no encontrada' })
-  findByTicketNumber(@Param('ticketNumber') ticketNumber: string) {
-    return this.parkingSessionsService.findByTicketNumber(ticketNumber);
+  findByTicketNumber(
+    @Param('ticketNumber') ticketNumber: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.parkingSessionsService.findByTicketNumber(
+      ticketNumber,
+      user.companyId,
+    );
   }
 
   @Get('history')
